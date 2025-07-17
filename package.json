@@ -1,0 +1,20 @@
+{
+  "name": "botwall-pay-per-crawl-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "dashboard",
+    "packages/backend",
+    "packages/sdk",
+    "packages/middleware"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "npm run dev --workspaces",
+    "test": "npm run test --workspaces",
+    "install:all": "npm install"
+  },
+  "dependencies": {
+    "framer-motion": "^12.23.6"
+  }
+}

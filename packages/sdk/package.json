@@ -1,0 +1,41 @@
+{
+  "name": "@botwall/sdk",
+  "version": "1.0.0",
+  "description": "BotWall SDK for site protection and bot crawling",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "botwall",
+    "crawling",
+    "middleware",
+    "protection",
+    "monetization",
+    "api"
+  ],
+  "author": "BotWall Team",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "express": "^4.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/botwall/sdk.git"
+  }
+}

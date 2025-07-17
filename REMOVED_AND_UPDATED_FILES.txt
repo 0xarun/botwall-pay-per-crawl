@@ -1,0 +1,24 @@
+BotWall Open Source Cleanup - Removed and Updated Files
+=====================================================
+
+REMOVED FILES:
+--------------
+1. packages/backend/data/botwall.db
+   - Local SQLite database file, not needed for open source.
+2. packages/backend/data/botwall.db-shm
+   - SQLite shared memory file, local-only.
+3. packages/backend/data/botwall.db-wal
+   - SQLite write-ahead log file, local-only.
+4. dashboard/src/utils/demoData.ts
+   - Demo data for local testing, not needed in open source.
+5. dashboard/src/utils/testFlow.ts
+   - Demo/test utility, not needed in open source.
+
+UPDATED FILES:
+--------------
+1. packages/backend/data/schema.sql
+   - Removed 'site_id' and 'site_secret' columns from the 'sites' table.
+   - Removed related index 'idx_sites_site_id'.
+   - Reason: No longer storing site_id/site_secret for open source security and simplicity.
+
+If you need to regenerate demo/test data, please refer to the documentation for safe alternatives. 

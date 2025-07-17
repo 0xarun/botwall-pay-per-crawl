@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node modules
+node_modules
+packages/*/node_modules
+
+# Build output
+dist
+dist-ssr
+packages/*/dist
+
+# Local env
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Database and sensitive data
+packages/backend/data/*.db*
+packages/backend/data/*.db-shm
+
+# Lock files (except root)
+packages/*/package-lock.json
+packages/*/bun.lockb
+bun.lockb
+
+.env
+packages/*/.env

@@ -1,0 +1,40 @@
+{
+  "name": "@botwall/middleware",
+  "version": "1.0.0",
+  "description": "Express middleware for protecting your API routes with pay-per-crawl and signature verification.",
+  "main": "dist/validateCrawlRequest.js",
+  "types": "dist/validateCrawlRequest.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "botwall",
+    "middleware",
+    "express",
+    "pay-per-crawl",
+    "signature",
+    "protection"
+  ],
+  "author": "BotWall Team",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^24.0.14",
+    "dotenv": "^17.2.0",
+    "node-fetch": "^2.7.0",
+    "pg": "^8.16.3",
+    "sqlite3": "^5.1.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.4"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/botwall/middleware.git"
+  }
+}
