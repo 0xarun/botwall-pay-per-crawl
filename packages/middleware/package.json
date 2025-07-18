@@ -1,6 +1,6 @@
 {
   "name": "@botwall/middleware",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Express middleware for protecting your API routes with pay-per-crawl and signature verification.",
   "main": "dist/validateCrawlRequest.js",
   "types": "dist/validateCrawlRequest.d.ts",
@@ -35,6 +35,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/botwall/middleware.git"
+    "url": "https://github.com/0xarun/botwall-pay-per-crawl.git"
   }
 }

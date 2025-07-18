@@ -1,6 +1,6 @@
 {
   "name": "@botwall/sdk",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "BotWall SDK for site protection and bot crawling",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -36,6 +36,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/botwall/sdk.git"
+    "url": "https://github.com/0xarun/botwall-pay-per-crawl.git"
   }
 }
