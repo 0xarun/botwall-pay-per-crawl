@@ -10,7 +10,7 @@ export class BotWallClient {
   constructor(apiUrl?: string) {
     // Use BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
     // To set: add BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
-    this.apiUrl = apiUrl || process.env.BACKEND_URL || '/api';
+    this.apiUrl = apiUrl || process.env.BACKEND_URL || 'https://botwall-api.onrender.com/api';
   }
 
   /**

@@ -70,19 +70,17 @@ app.use('/api', validateCrawlRequest);
         <div className="mb-4">
           <div className="text-xs font-semibold text-gray-500 mb-1">Send a Signed Crawl Request</div>
           <pre className="bg-gray-100 dark:bg-gray-800 text-xs p-3 rounded overflow-x-auto">
-{`import { sendCrawlRequest } from '@botwall/sdk';
+{`import { signRequest, sendCrawlRequest } from '@botwall/sdk';
 
 const headers = {
-  'crawler-id': 'mybot.com',
+  'crawler-id': 'YOUR_BOT_ID',
   'crawler-max-price': '0.05',
-  'signature-input': 'host path',
-  'host': 'example.com',
-  'path': '/api/data',
+  'signature-input': 'crawler-id crawler-max-price',
 };
-const privateKey = '...'; // Your Ed25519 private key (base64)
-const response = await sendCrawlRequest('https://example.com/api/data', headers, privateKey);
-const data = await response.json();
-console.log(data);
+
+headers['signature'] = signRequest(headers, 'YOUR_PRIVATE_KEY_BASE64');
+
+await sendCrawlRequest('https://target-site.com/api/protected', headers);
 `}
           </pre>
         </div>

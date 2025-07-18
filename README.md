@@ -57,21 +57,20 @@ That’s it! Your `/api` routes are now protected by BotWall.
    npm install @botwall/sdk
    ```
 2. **Send a signed crawl request:**
-   ```js
-   import { sendCrawlRequest } from '@botwall/sdk';
+```js
+import { signRequest, sendCrawlRequest } from '@botwall/sdk';
 
-   const headers = {
-     'crawler-id': 'mybot.com',
-     'crawler-max-price': '0.05',
-     'signature-input': 'host path',
-     'host': 'example.com',
-     'path': '/api/data',
-   };
-   const privateKey = '...'; // Your Ed25519 private key (base64)
-   const response = await sendCrawlRequest('https://example.com/api/data', headers, privateKey);
-   const data = await response.json();
-   console.log(data);
-   ```
+const headers = {
+  'crawler-id': 'YOUR_BOT_ID',
+  'crawler-max-price': '0.05',
+  'signature-input': 'crawler-id crawler-max-price',
+};
+
+headers['signature'] = signRequest(headers, 'YOUR_PRIVATE_KEY_BASE64');
+
+await sendCrawlRequest('https://target-site.com/api/protected', headers);
+
+```
 
 - For advanced usage (keypair generation, manual signing, error handling, etc.), see the [SDK README](./packages/sdk/README.md).
 

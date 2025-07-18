@@ -2,30 +2,21 @@
 
 The BotWall SDK allows bot developers to interact with pay-per-crawl protected APIs.
 
-## Configuration
-
-- You can pass your backend API URL directly to the SDK client or helper functions (recommended for production and multi-environment setups).
-- If not provided, the SDK will use the backend API URL from the environment variable `BACKEND_URL`.
-- To set: add `BACKEND_URL=https://your-backend-url/api` to your `.env` file (or `http://localhost:3001/api` for local development).
 
 ## Example Usage
 
 ```js
-import { BotWallClient, sendCrawlRequest } from '@botwall/sdk';
+import { signRequest, sendCrawlRequest } from '@botwall/sdk';
 
-// Option 1: Use .env BACKEND_URL (default)
-const client = new BotWallClient();
+const headers = {
+  'crawler-id': 'YOUR_BOT_ID',
+  'crawler-max-price': '0.05',
+  'signature-input': 'crawler-id crawler-max-price',
+};
 
-// Option 2: Pass backend API URL explicitly (recommended for production)
-const client = new BotWallClient('https://your-backend-url/api');
+headers['signature'] = signRequest(headers, 'YOUR_PRIVATE_KEY_BASE64');
 
-// For single-call helpers:
-const response = await sendCrawlRequest(
-  'https://example.com/api/data', // target site URL
-  headers,
-  privateKey,
-  { apiUrl: 'https://your-backend-url/api' } // <-- pass your backend API URL here
-);
+await sendCrawlRequest('https://target-site.com/api/protected', headers);
 ```
 
 ## Usage Summary
@@ -61,54 +52,6 @@ Bot developers can use the SDK to:
 - Sign requests to protected endpoints using their private key
 - (Optionally) Send signed crawl requests with fetch
 
-#### 1. Generate a Keypair
-
-```typescript
-import { generateKeypair } from '@botwall/sdk';
-
-const { publicKey, privateKey } = generateKeypair();
-// Save publicKey to DB during onboarding
-// Store privateKey securely (never share)
-```
-
-#### 2. Sign a Request
-
-```typescript
-import { signRequest } from '@botwall/sdk';
-
-const headers = {
-  'crawler-id': 'mybot.com',
-  'crawler-max-price': '0.03',
-  'signature-input': 'host path',
-  'host': 'techblog.com',
-  'path': '/docs',
-};
-
-headers['signature'] = signRequest(headers, myPrivateKey);
-
-// Now send the request with these headers
-fetch('https://techblog.com/docs', { headers });
-```
-
-#### 3. Send a Crawl Request (Auto-sign)
-
-```typescript
-import { sendCrawlRequest } from '@botwall/sdk';
-
-const headers = {
-  'crawler-id': 'mybot.com',
-  'crawler-max-price': '0.03',
-  'signature-input': 'host path',
-  'host': 'techblog.com',
-  'path': '/docs',
-};
-
-const response = await sendCrawlRequest('https://techblog.com/docs', headers, myPrivateKey);
-const data = await response.text();
-console.log(data);
-```
-
----
 
 ## API Reference
 
@@ -150,35 +93,6 @@ Sends a crawl request, auto-signing the headers using Ed25519.
 **Canonical Message:**
 - Concatenate the values of the headers listed in `signature-input`, separated by spaces.
 - Sign this string using Ed25519 and the bot's private key.
-
----
-
-## Example Bot Developer Flow
-
-```typescript
-import { generateKeypair, signRequest, sendCrawlRequest } from '@botwall/sdk';
-
-// 1. Generate keypair (once)
-const { publicKey, privateKey } = generateKeypair();
-// Register publicKey with BotWall, keep privateKey safe
-
-// 2. Prepare headers for a crawl
-const headers = {
-  'crawler-id': 'mybot.com',
-  'crawler-max-price': '0.05',
-  'signature-input': 'host path',
-  'host': 'techblog.com',
-  'path': '/api/data',
-};
-
-// 3. Sign the request
-headers['signature'] = signRequest(headers, privateKey);
-
-// 4. Send the request (manual or with helper)
-const response = await sendCrawlRequest('https://techblog.com/api/data', headers, privateKey);
-const data = await response.json();
-console.log(data);
-```
 
 ---
 

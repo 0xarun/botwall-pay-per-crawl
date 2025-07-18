@@ -246,28 +246,17 @@ export default function BotDeveloperDashboard() {
                         <span className="text-sm font-medium">SDK Usage:</span>
                         <div className="bg-muted p-3 rounded-md">
                           <pre className="text-xs overflow-x-auto">
-                            <code>{`import { generateKeypair, signRequest, sendCrawlRequest } from '@botwall/sdk';
+                            <code>{`import { signRequest, sendCrawlRequest } from '@botwall/sdk';
 
-// 1. Generate keypair (once)
-const { publicKey, privateKey } = generateKeypair();
-// Register publicKey with BotWall, keep privateKey safe
-
-// 2. Prepare headers for a crawl
 const headers = {
-  'crawler-id': 'mybot.com',
+  'crawler-id': 'YOUR_BOT_ID',
   'crawler-max-price': '0.05',
-  'signature-input': 'host path',
-  'host': 'techblog.com',
-  'path': '/api/data',
+  'signature-input': 'crawler-id crawler-max-price',
 };
 
-// 3. Sign the request
-headers['signature'] = signRequest(headers, privateKey);
+headers['signature'] = signRequest(headers, 'YOUR_PRIVATE_KEY_BASE64');
 
-// 4. Send the request (manual or with helper)
-const response = await sendCrawlRequest('https://techblog.com/api/data', headers, privateKey);
-const data = await response.json();
-console.log(data);`}</code>
+await sendCrawlRequest('https://target-site.com/api/protected', headers);`}</code>
                           </pre>
                         </div>
                       </div>

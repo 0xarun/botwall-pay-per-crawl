@@ -11,13 +11,7 @@ npm install @botwall/middleware
 ```js
 const { validateCrawlRequest } = require('@botwall/middleware');
 
-// Option 1: Use env var (recommended for most users)
-app.use('/api', validateCrawlRequest({
-  backendUrl: process.env.BACKEND_URL // e.g., 'http://localhost:3001' or 'https://botwall.com'
-}));
-
-// Option 2: Use default (middleware will use its built-in default or blank)
-app.use('/api', validateCrawlRequest());
+app.use('/article', validateCrawlRequest());
 ```
 
 - No credentials or secrets needed. The middleware:

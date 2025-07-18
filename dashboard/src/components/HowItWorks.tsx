@@ -7,17 +7,17 @@ const HowItWorks = () => {
     {
       icon: Globe,
       title: "Site Owners Register",
-      description: "Add your site, set your price per crawl, and get your protection SDK.",
-      code: `npm install @botwall/sdk\napp.use(payPerCrawlMiddleware);`,
+      description: "Protect your routes from unauthorized bots and monetize API access with simple middleware.",
+      code: `npm install @botwall/middleware\n\nconst { validateCrawlRequest } = require('@botwall/middleware');\n\napp.use('/article', validateCrawlRequest());`,
       color: "text-primary"
     },
     {
       icon: Bot,
       title: "Bot Developers Subscribe",
-      description: "Register your bot, purchase credits, and get access to protected content.",
-      code: `const bot = initBot({\n  privateKey: 'YOUR_ED25519_PRIVATE_KEY'\n})\nconst data = await fetchWithCredits(bot, url)`,
+      description: "Register your bot, buy credits, and access protected endpoints with signed headers.",
+      code: `import { signRequest, sendCrawlRequest } from '@botwall/sdk';\n\nconst headers = {\n  'crawler-id': 'YOUR_BOT_ID',\n  'crawler-max-price': '0.05',\n  'signature-input': 'crawler-id crawler-max-price',\n};\n\nheaders['signature'] = signRequest(headers, 'YOUR_PRIVATE_KEY_BASE64');\n\nawait sendCrawlRequest('https://target-site.com/route', headers);`,
       color: "text-accent-bright"
-    },
+    },    
     {
       icon: CreditCard,
       title: "Automatic Billing",
