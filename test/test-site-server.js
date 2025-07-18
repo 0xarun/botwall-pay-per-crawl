@@ -4,7 +4,7 @@ import { validateCrawlRequest } from '../packages/middleware/dist/validateCrawlR
 const app = express();
 
 // Use the validateCrawlRequest middleware directly for the protected route
-app.get('/api/protected', validateCrawlRequest, (req, res) => {
+app.get('/api/protected', validateCrawlRequest(), (req, res) => {
   res.json({ message: 'Protected data for bots only!' });
 });
 

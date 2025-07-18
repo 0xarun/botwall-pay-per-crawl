@@ -184,7 +184,7 @@ router.get('/stats/bot-developer', authenticateToken, requireBotDeveloper, async
   }
 });
 
-// Record a crawl from middleware (signature-based flow)
+// --- PUBLIC: Record a crawl from middleware (signature-based flow) ---
 router.post('/record', async (req: Request, res: Response) => {
   try {
     const { crawlerId, domain, path, userAgent } = req.body;

@@ -1,6 +1,45 @@
 # BotWall SDK
 
-The official BotWall SDK for protecting your content and accessing protected data ethically.
+The BotWall SDK allows bot developers to interact with pay-per-crawl protected APIs.
+
+## Configuration
+
+- You can pass your backend API URL directly to the SDK client or helper functions (recommended for production and multi-environment setups).
+- If not provided, the SDK will use the backend API URL from the environment variable `BACKEND_URL`.
+- To set: add `BACKEND_URL=https://your-backend-url/api` to your `.env` file (or `http://localhost:3001/api` for local development).
+
+## Example Usage
+
+```js
+import { BotWallClient, sendCrawlRequest } from '@botwall/sdk';
+
+// Option 1: Use .env BACKEND_URL (default)
+const client = new BotWallClient();
+
+// Option 2: Pass backend API URL explicitly (recommended for production)
+const client = new BotWallClient('https://your-backend-url/api');
+
+// For single-call helpers:
+const response = await sendCrawlRequest(
+  'https://example.com/api/data', // target site URL
+  headers,
+  privateKey,
+  { apiUrl: 'https://your-backend-url/api' } // <-- pass your backend API URL here
+);
+```
+
+## Usage Summary
+
+| Usage Style                | How to Pass Backend URL                | Example                                 |
+|----------------------------|----------------------------------------|-----------------------------------------|
+| SDK Client (recommended)   | Constructor param                      | `new BotWallClient('https://.../api')`  |
+| Single-call helper         | Option param `{ apiUrl: ... }`         | `sendCrawlRequest(..., { apiUrl: ... })`|
+| .env (fallback)            | `BACKEND_URL` in .env                  |                                         |
+
+## Notes
+- Passing the backend API URL explicitly is recommended for production and when deploying to multiple environments.
+- If you do not pass a URL, the SDK will use `process.env.BACKEND_URL` if available.
+- For local development, set `BACKEND_URL=http://localhost:3001/api` in your `.env` file.
 
 ## Installation
 
@@ -14,15 +53,6 @@ npm install @botwall/sdk
 
 Protect your routes and monetize bot access:
 
-```javascript
-const { payPerCrawlMiddleware } = require('@botwall/sdk');
-
-// Basic protection
-app.use('/api', payPerCrawlMiddleware({
-  siteId: 'your_site_id',
-  siteSecret: 'your_site_secret'
-}));
-```
 
 ### For Bot Developers (Ed25519 Signature Flow)
 

@@ -147,4 +147,22 @@ router.delete('/:id', authenticateToken, requireSiteOwner, async (req: Request, 
   }
 });
 
+// --- PUBLIC: Get pricing for a domain/path (for middleware verification) ---
+router.get('/:domain/pricing', async (req: Request, res: Response) => {
+  try {
+    const { domain } = req.params;
+    const { path } = req.query;
+    const site = await queryOne('SELECT price_per_crawl FROM sites WHERE domain = $1', [domain]);
+    if (!site) {
+      // Default price if not found
+      return res.json({ price: 0.01, blocked: false });
+    }
+    // TODO: Add path-based blocking logic if needed
+    res.json({ price: Number(site.price_per_crawl), blocked: false });
+  } catch (error) {
+    console.error('Get pricing error:', error);
+    res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch pricing.' });
+  }
+});
+
 export default router; 

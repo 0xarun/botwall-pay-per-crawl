@@ -21,8 +21,8 @@ REAL BOT TESTING INSTRUCTIONS:
 """
 
 # === FILL THESE IN ===
-BOT_ID = "bot_b6912233f"
-PRIVATE_KEY_B64 = "SEFUXIYUiMgvJcw+5AzQcegQ6tAVoWvUnzt1psFgXz1NtT/CPKnaD7Yvx+7wpbb2j0YFMXCewMvO1wl7YFdAMA=="
+BOT_ID = "a264baf5-e642-4130-912c-f219f579d93e"
+PRIVATE_KEY_B64 = "eqP6FkBOXRUfO6u/Eh/MrGwp6Ho35ZQWNCEq/NctOcDMTgFNPOwdHIjv4ErrSAxLDC4LGWap5ZxUoXogAzv2DQ=="
 DOMAIN = "localhost"  # or your real test domain
 PRICE = 0.01  # set to your site's price_per_crawl or higher
 

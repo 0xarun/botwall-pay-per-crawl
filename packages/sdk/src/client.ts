@@ -8,8 +8,9 @@ export class BotWallClient {
   private apiUrl: string;
 
   constructor(apiUrl?: string) {
-    // Default to the project's API URL, but allow override
-    this.apiUrl = apiUrl || 'http://localhost:3001/api';
+    // Use BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
+    // To set: add BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
+    this.apiUrl = apiUrl || process.env.BACKEND_URL || '/api';
   }
 
   /**

@@ -183,24 +183,24 @@ router.get('/:id', authenticateToken, requireBotDeveloper, async (req: Request, 
   }
 });
 
-// DEV ONLY: Mock add credits to a bot
-router.post('/:id/mock-add-credits', async (req, res) => {
+// DEV ONLY: Mock add credits to a bot (now uses bot_id for public API consistency)
+router.post('/:botId/mock-add-credits', async (req, res) => {
   if (process.env.NODE_ENV !== 'development') {
     return res.status(403).json({ error: 'Mock credit addition is only allowed in development mode.' });
   }
-  const { id } = req.params;
+  const { botId } = req.params;
   const { credits } = req.body;
   if (!credits || typeof credits !== 'number' || credits < 1) {
     return res.status(400).json({ error: 'Invalid credits amount.' });
   }
-  // Find bot
-  const bot = await queryOne('SELECT * FROM bots WHERE id = $1', [id]);
+  // Find bot by bot_id
+  const bot = await queryOne('SELECT * FROM bots WHERE bot_id = $1', [botId]);
   if (!bot) {
     return res.status(404).json({ error: 'Bot not found.' });
   }
   // Add credits
-  await query('UPDATE bots SET credits = credits + $1, updated_at = now() WHERE id = $2', [credits, id]);
-  const updatedBot = await queryOne('SELECT * FROM bots WHERE id = $1', [id]);
+  await query('UPDATE bots SET credits = credits + $1, updated_at = now() WHERE bot_id = $2', [credits, botId]);
+  const updatedBot = await queryOne('SELECT * FROM bots WHERE bot_id = $1', [botId]);
   res.json({ message: `Added ${credits} credits to bot.`, bot: updatedBot });
 });
 
@@ -228,6 +228,21 @@ router.get('/bot/:id/middleware-snippet', async (req: Request, res: Response) =>
       error: 'Internal server error',
       message: 'Failed to generate middleware snippet.'
     });
+  }
+});
+
+// --- PUBLIC: Get public key for a bot/crawler (for middleware verification) ---
+router.get('/:crawlerId/public-key', async (req: Request, res: Response) => {
+  try {
+    const { crawlerId } = req.params;
+    const bot = await queryOne('SELECT public_key FROM bots WHERE bot_id = $1', [crawlerId]);
+    if (!bot || !bot.public_key) {
+      return res.status(404).json({ error: 'Bot not found', message: 'No bot with this crawlerId.' });
+    }
+    res.json({ publicKey: bot.public_key });
+  } catch (error) {
+    console.error('Get public key error:', error);
+    res.status(500).json({ error: 'Internal server error', message: 'Failed to fetch public key.' });
   }
 });
 

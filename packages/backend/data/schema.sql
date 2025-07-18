@@ -1,80 +1,77 @@
--- USERS
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  full_name TEXT,
-  role TEXT CHECK(role IN ('site_owner', 'bot_developer')) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- PROFILES
-CREATE TABLE profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  full_name TEXT,
-  role TEXT CHECK(role IN ('site_owner', 'bot_developer')) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.bots (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  developer_id uuid NOT NULL,
+  bot_name text NOT NULL,
+  bot_id text NOT NULL UNIQUE,
+  api_key text,
+  credits integer NOT NULL DEFAULT 0,
+  usage_reason text,
+  public_key text,
+  private_key text,
+  generated_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT bots_pkey PRIMARY KEY (id),
+  CONSTRAINT bots_developer_id_fkey FOREIGN KEY (developer_id) REFERENCES public.users(id)
 );
-
--- SITES
-CREATE TABLE sites (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  domain TEXT NOT NULL,
-  price_per_crawl NUMERIC(10,4) NOT NULL DEFAULT 0.01,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.crawls (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  bot_id uuid NOT NULL,
+  site_id uuid NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['success'::text, 'failed'::text, 'blocked'::text])),
+  path text NOT NULL,
+  user_agent text,
+  timestamp timestamp with time zone DEFAULT now(),
+  CONSTRAINT crawls_pkey PRIMARY KEY (id),
+  CONSTRAINT crawls_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT crawls_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id)
 );
-
--- BOTS
-CREATE TABLE bots (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  developer_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  bot_name TEXT NOT NULL,
-  bot_id TEXT UNIQUE NOT NULL,
-  api_key TEXT,
-  credits INTEGER NOT NULL DEFAULT 0,
-  usage_reason TEXT,
-  public_key TEXT,
-  private_key TEXT,
-  generated_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.profiles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  email text NOT NULL,
+  full_name text,
+  role text NOT NULL CHECK (role = ANY (ARRAY['site_owner'::text, 'bot_developer'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- CRAWLS
-CREATE TABLE crawls (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bot_id UUID NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
-  status TEXT CHECK(status IN ('success', 'failed', 'blocked')) NOT NULL,
-  path TEXT NOT NULL,
-  user_agent TEXT,
-  timestamp TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.sites (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  owner_id uuid NOT NULL,
+  name text NOT NULL,
+  domain text NOT NULL,
+  price_per_crawl numeric NOT NULL DEFAULT 0.01,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sites_pkey PRIMARY KEY (id),
+  CONSTRAINT sites_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id)
 );
-
--- TRANSACTIONS
-CREATE TABLE transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  bot_id UUID REFERENCES bots(id) ON DELETE SET NULL,
-  amount NUMERIC(10,2) NOT NULL,
-  credits INTEGER NOT NULL,
-  status TEXT CHECK(status IN ('pending', 'completed', 'failed')) NOT NULL,
-  lemon_order_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE public.transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  bot_id uuid,
+  amount numeric NOT NULL,
+  credits integer NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['pending'::text, 'completed'::text, 'failed'::text])),
+  lemon_order_id text,
+  created_at timestamp with time zone DEFAULT now(),
+  pack_name text,
+  CONSTRAINT transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT transactions_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
+  CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- INDEXES
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_sites_owner_id ON sites(owner_id);
-CREATE INDEX idx_bots_developer_id ON bots(developer_id);
-CREATE INDEX idx_bots_bot_id ON bots(bot_id);
-CREATE INDEX idx_crawls_bot_id ON crawls(bot_id);
-CREATE INDEX idx_crawls_site_id ON crawls(site_id);
-CREATE INDEX idx_transactions_user_id ON transactions(user_id);
+CREATE TABLE public.users (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  email text NOT NULL UNIQUE,
+  password_hash text NOT NULL,
+  full_name text,
+  role text NOT NULL CHECK (role = ANY (ARRAY['site_owner'::text, 'bot_developer'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id)
+);

@@ -4,7 +4,9 @@ import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
 import { useState } from 'react';
 
-const API_BASE_URL = 'http://localhost:3001/api';
+// Use VITE_BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
+// To set: add VITE_BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
 
 export interface Transaction {
   id: string;
@@ -199,7 +201,7 @@ export function useMockCreditPurchase() {
     setIsPurchasing(true);
     try {
       // Call backend to add credits (dev only)
-      const response = await fetch(`http://localhost:3001/api/bots/${botId}/mock-add-credits`, {
+      const response = await fetch(`${API_BASE_URL}/bots/${botId}/mock-add-credits`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,9 +5,10 @@ import { signRequest, sendCrawlRequest } from '../packages/sdk/dist/index.js';
 
 // === Step 1: Paste your real bot_id and privateKey below ===
 // Get these from your bot registration (bot_id from DB, privateKey shown ONCE at registration)
-const BOT_ID = 'a264baf5-e642-4130-912c-f219f579d93e'; // e.g., 'bot_abc123...'
-const PRIVATE_KEY = 'eqP6FkBOXRUfO6u/Eh/MrGwp6Ho35ZQWNCEq/NctOcDMTgFNPOwdHIjv4ErrSAxLDC4LGWap5ZxUoXogAzv2DQ=='; // base64 string, keep this safe!
-
+//const BOT_ID = 'a264baf5-e642-4130-912c-f219f579d93e'; // e.g., 'bot_abc123...'
+const BOT_ID = '19760d4b-95d4-442a-99e6-faafe5e38f5f'
+//arunbot const PRIVATE_KEY = 'eqP6FkBOXRUfO6u/Eh/MrGwp6Ho35ZQWNCEq/NctOcDMTgFNPOwdHIjv4ErrSAxLDC4LGWap5ZxUoXogAzv2DQ=='; // base64 string, keep this safe!
+const PRIVATE_KEY = '20YtoOv/+tpk/oEl7QAB965W+xQv7b6YT4RfmRg+rbcXXK5FP9nVlXWa5gjbVsir12TmqTTr0YyxwEHGKoHJJA=='
 // === Step 2: Prepare headers ===
 const headers = {
   'crawler-id': BOT_ID, // This must match your registered bot_id

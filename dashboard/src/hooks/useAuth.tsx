@@ -30,7 +30,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = 'http://localhost:3001/api';
+// Use VITE_BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
+// To set: add VITE_BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
