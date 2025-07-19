@@ -1,5 +1,7 @@
 # BotWall Pay-Per-Crawl Monorepo
 
+now testing on: https://botwall.onrender.com/
+
 ## Overview
 
 BotWall is a modern, open-source pay-per-crawl system that empowers site owners to monetize their content and enables bot developers to access protected data ethically. The system uses cryptographic signatures (Ed25519) for bot authentication and a credit-based payment model for API access.
