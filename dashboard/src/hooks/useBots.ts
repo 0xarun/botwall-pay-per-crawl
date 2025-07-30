@@ -2,10 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
-
-// Use VITE_BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
-// To set: add VITE_BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
+import { API_BASE_URL } from '../lib/utils';
 
 export interface Bot {
   id: string;

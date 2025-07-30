@@ -13,9 +13,16 @@ const router = Router();
  */
 router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
   try {
+    // Query both crawls and bot_crawl_logs tables
     const crawls = await query(`
       SELECT 
-        c.*,
+        c.id,
+        c.bot_id,
+        c.site_id,
+        c.status,
+        c.path,
+        c.user_agent,
+        c.timestamp,
         b.bot_name,
         s.name as site_name,
         s.domain as site_domain
@@ -23,7 +30,22 @@ router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Reque
       JOIN bots b ON c.bot_id = b.id
       JOIN sites s ON c.site_id = s.id
       WHERE s.owner_id = $1
-      ORDER BY c.timestamp DESC
+      UNION ALL
+      SELECT 
+        bcl.id,
+        bcl.bot_id,
+        bcl.site_id,
+        bcl.status,
+        bcl.path,
+        bcl.user_agent,
+        bcl.timestamp,
+        bcl.bot_name,
+        s.name as site_name,
+        s.domain as site_domain
+      FROM bot_crawl_logs bcl
+      JOIN sites s ON bcl.site_id = s.id
+      WHERE s.owner_id = $1
+      ORDER BY timestamp DESC
       LIMIT 100
     `, [req.user!.id]);
     res.json({
@@ -48,9 +70,17 @@ router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Reque
  */
 router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req: Request, res: Response) => {
   try {
+    // Query both crawls and bot_crawl_logs tables
+    // Note: bot_crawl_logs only includes signed bots (bot_id is not NULL)
     const crawls = await query(`
       SELECT 
-        c.*,
+        c.id,
+        c.bot_id,
+        c.site_id,
+        c.status,
+        c.path,
+        c.user_agent,
+        c.timestamp,
         b.bot_name,
         s.name as site_name,
         s.domain as site_domain
@@ -58,7 +88,23 @@ router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req:
       JOIN bots b ON c.bot_id = b.id
       JOIN sites s ON c.site_id = s.id
       WHERE b.developer_id = $1
-      ORDER BY c.timestamp DESC
+      UNION ALL
+      SELECT 
+        bcl.id,
+        bcl.bot_id,
+        bcl.site_id,
+        bcl.status,
+        bcl.path,
+        bcl.user_agent,
+        bcl.timestamp,
+        bcl.bot_name,
+        s.name as site_name,
+        s.domain as site_domain
+      FROM bot_crawl_logs bcl
+      JOIN sites s ON bcl.site_id = s.id
+      JOIN bots b ON bcl.bot_id = b.id
+      WHERE b.developer_id = $1 AND bcl.bot_id IS NOT NULL
+      ORDER BY timestamp DESC
       LIMIT 100
     `, [req.user!.id]);
     res.json({
@@ -77,56 +123,26 @@ router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req:
 // Get crawl statistics for site owners
 router.get('/stats/site-owner', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
   try {
-    // Total crawls
-    const totalCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1
+    // Get aggregated stats from sites table
+    const stats = await query(`
+      SELECT 
+        SUM(total_requests) as total_requests,
+        SUM(successful_requests) as successful_requests,
+        SUM(total_earnings) as total_earnings
+      FROM sites 
+      WHERE owner_id = $1
     `, [req.user!.id]);
 
-    // Successful crawls
-    const successfulCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1 AND c.status = 'success'
-    `, [req.user!.id]);
-
-    // Failed crawls
-    const failedCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1 AND c.status = 'failed'
-    `, [req.user!.id]);
-
-    // Blocked crawls
-    const blockedCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1 AND c.status = 'blocked'
-    `, [req.user!.id]);
-
-    // Total earnings: sum price_per_crawl * successful crawls per site
-    const earningsRows = await query(`
-      SELECT s.price_per_crawl, COUNT(c.id) as crawl_count
-      FROM crawls c
-      JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1 AND c.status = 'success'
-      GROUP BY s.id, s.price_per_crawl
-    `, [req.user!.id]);
-    let totalEarnings = 0;
-    for (const row of earningsRows) {
-      totalEarnings += Number(row.price_per_crawl) * Number(row.crawl_count);
-    }
+    const totalRequests = Number(stats[0]?.total_requests || 0);
+    const successfulRequests = Number(stats[0]?.successful_requests || 0);
+    const totalEarnings = Number(stats[0]?.total_earnings || 0);
+    const failedRequests = totalRequests - successfulRequests; // Calculate failed as difference
 
     res.json({
-      totalCrawls: totalCrawls[0]?.count || 0,
-      successfulCrawls: successfulCrawls[0]?.count || 0,
-      failedCrawls: failedCrawls[0]?.count || 0,
-      blockedCrawls: blockedCrawls[0]?.count || 0,
+      totalCrawls: totalRequests,
+      successfulCrawls: successfulRequests,
+      failedCrawls: failedRequests,
+      blockedCrawls: 0, // We can add blocked counter later if needed
       totalEarnings: totalEarnings
     });
   } catch (error) {
@@ -141,39 +157,24 @@ router.get('/stats/site-owner', authenticateToken, requireSiteOwner, async (req:
 // Get crawl statistics for bot developers
 router.get('/stats/bot-developer', authenticateToken, requireBotDeveloper, async (req: Request, res: Response) => {
   try {
-    const totalCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN bots b ON c.bot_id = b.id
-      WHERE b.developer_id = $1
+    // Get aggregated stats from bots table
+    const stats = await query(`
+      SELECT 
+        SUM(total_requests) as total_requests,
+        SUM(successful_requests) as successful_requests
+      FROM bots 
+      WHERE developer_id = $1
     `, [req.user!.id]);
 
-    const successfulCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN bots b ON c.bot_id = b.id
-      WHERE b.developer_id = $1 AND c.status = 'success'
-    `, [req.user!.id]);
-
-    const failedCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN bots b ON c.bot_id = b.id
-      WHERE b.developer_id = $1 AND c.status = 'failed'
-    `, [req.user!.id]);
-
-    const blockedCrawls = await query(`
-      SELECT COUNT(*) as count
-      FROM crawls c
-      JOIN bots b ON c.bot_id = b.id
-      WHERE b.developer_id = $1 AND c.status = 'blocked'
-    `, [req.user!.id]);
+    const totalRequests = Number(stats[0]?.total_requests || 0);
+    const successfulRequests = Number(stats[0]?.successful_requests || 0);
+    const failedRequests = totalRequests - successfulRequests; // Calculate failed as difference
 
     res.json({
-      totalCrawls: totalCrawls[0]?.count || 0,
-      successfulCrawls: successfulCrawls[0]?.count || 0,
-      failedCrawls: failedCrawls[0]?.count || 0,
-      blockedCrawls: blockedCrawls[0]?.count || 0
+      totalCrawls: totalRequests,
+      successfulCrawls: successfulRequests,
+      failedCrawls: failedRequests,
+      blockedCrawls: 0 // We can add blocked counter later if needed
     });
   } catch (error) {
     console.error('Get bot stats error:', error);

@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import SiteOwnerDashboard from "./pages/SiteOwnerDashboard";
 import BotDeveloperDashboard from "./pages/BotDeveloperDashboard";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import Docs from "./pages/Docs";
 
@@ -35,6 +36,14 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/docs" element={<Docs />} />
             <Route path="/auth" element={<Auth />} />
+            <Route 
+              path="/analytics" 
+              element={
+                <ProtectedRoute allowedRoles={['site_owner', 'bot_developer']}>
+                  <Analytics />
+                </ProtectedRoute>
+              } 
+            />
             <Route 
               path="/dashboard/site-owner" 
               element={

@@ -1,10 +1,7 @@
 // React Query hook for managing crawls data
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-
-// Use VITE_BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
-// To set: add VITE_BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
+import { API_BASE_URL } from '../lib/utils';
 
 export interface Crawl {
   id: string;
@@ -171,4 +168,93 @@ export function useCrawlStats() {
     siteStatsError,
     botStatsError
   };
+}
+
+export function useSiteBotLogs(siteId: string, limit: number = 100) {
+  return useQuery({
+    queryKey: ['site-bot-logs', siteId, limit],
+    queryFn: async () => {
+      if (!siteId) return [];
+      
+      // For now, just fetch from bot_crawl_logs table
+      const response = await fetch(`${API_BASE_URL}/sites/${siteId}/bot-logs?limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch bot logs');
+      }
+      
+      const botLogs = await response.json();
+      
+      // Format the data
+      return botLogs.map((log: any) => ({
+        ...log,
+        source: 'bot_crawl_logs',
+        bot_name: log.bot_name || log.known_bot_name || 'Unknown'
+      }));
+    },
+    enabled: !!siteId
+  });
+}
+
+export function useSiteBotPreferences(siteId: string) {
+  return useQuery({
+    queryKey: ['site-bot-prefs', siteId],
+    queryFn: async () => {
+      if (!siteId) return [];
+      const response = await fetch(`${API_BASE_URL}/sites/${siteId}/bot-prefs`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch bot preferences');
+      }
+      return await response.json();
+    },
+    enabled: !!siteId
+  });
+}
+
+export function useKnownBots() {
+  return useQuery({
+    queryKey: ['known-bots'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/known-bots`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch known bots');
+      }
+      return await response.json();
+    }
+  });
+}
+
+export function useUpdateSiteBotPreference(siteId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ known_bot_id, blocked }: { known_bot_id: string; blocked: boolean }) => {
+      const response = await fetch(`${API_BASE_URL}/sites/${siteId}/bot-prefs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ known_bot_id, blocked })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update bot preference');
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-bot-prefs', siteId] });
+    }
+  });
 } 

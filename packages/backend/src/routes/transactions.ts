@@ -116,9 +116,7 @@ router.post('/create-checkout', authenticateToken, async (req: Request, res: Res
         }
       }
     });
-    console.log('LemonSqueezy storeId:', storeId);
-    console.log('LemonSqueezy variantId:', variantId);
-    console.log('LemonSqueezy requestBody:', requestBody);
+    // LemonSqueezy webhook processing
     // Call LemonSqueezy API to create checkout session
     const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
       method: 'POST',
@@ -258,14 +256,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
     if (transaction.status === 'completed') {
-      console.log('Transaction already completed, skipping');
+      // Transaction already completed, skipping
       return res.status(200).json({ message: 'Already processed' });
     }
     // Mark transaction as completed and store LemonSqueezy order ID
     await query('UPDATE transactions SET status = $1, lemon_order_id = $2 WHERE id = $3', ['completed', lemonOrderId, custom.transactionId]);
     // Add credits to bot
     await query('UPDATE bots SET credits = credits + $1 WHERE id = $2', [transaction.credits, transaction.bot_id]);
-    console.log(`Credited ${transaction.credits} to bot ${transaction.bot_id} for transaction ${transaction.id}`);
+          // Credited credits to bot for transaction
     res.status(200).json({ message: 'Webhook processed' });
   } catch (error) {
     console.error('Webhook handler error:', error);

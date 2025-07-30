@@ -1,6 +1,24 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.bot_crawl_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL,
+  bot_id uuid,
+  known_bot_id uuid,
+  user_agent text NOT NULL,
+  bot_name text NOT NULL,
+  path text NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['success'::text, 'blocked'::text, 'failed'::text])),
+  ip_address text,
+  timestamp timestamp with time zone DEFAULT now(),
+  raw_headers jsonb,
+  extra jsonb,
+  CONSTRAINT bot_crawl_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT bot_crawl_logs_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT bot_crawl_logs_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
+  CONSTRAINT bot_crawl_logs_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id)
+);
 CREATE TABLE public.bots (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   developer_id uuid NOT NULL,
@@ -12,6 +30,8 @@ CREATE TABLE public.bots (
   public_key text,
   private_key text,
   generated_at timestamp with time zone,
+  total_requests integer NOT NULL DEFAULT 0,
+  successful_requests integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT bots_pkey PRIMARY KEY (id),
@@ -20,14 +40,25 @@ CREATE TABLE public.bots (
 CREATE TABLE public.crawls (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   bot_id uuid NOT NULL,
-  site_id uuid NOT NULL,
+  site_id uuid,
   status text NOT NULL CHECK (status = ANY (ARRAY['success'::text, 'failed'::text, 'blocked'::text])),
   path text NOT NULL,
   user_agent text,
   timestamp timestamp with time zone DEFAULT now(),
   CONSTRAINT crawls_pkey PRIMARY KEY (id),
-  CONSTRAINT crawls_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
-  CONSTRAINT crawls_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id)
+  CONSTRAINT crawls_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
+  CONSTRAINT crawls_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.known_bots (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  user_agent_pattern text NOT NULL,
+  website text,
+  description text,
+  default_blocked boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT known_bots_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -40,12 +71,26 @@ CREATE TABLE public.profiles (
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
+CREATE TABLE public.site_bot_preferences (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL,
+  known_bot_id uuid NOT NULL,
+  blocked boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT site_bot_preferences_pkey PRIMARY KEY (id),
+  CONSTRAINT site_bot_preferences_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT site_bot_preferences_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id)
+);
 CREATE TABLE public.sites (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   owner_id uuid NOT NULL,
   name text NOT NULL,
   domain text NOT NULL,
   price_per_crawl numeric NOT NULL DEFAULT 0.01,
+  total_earnings numeric NOT NULL DEFAULT 0,
+  total_requests integer NOT NULL DEFAULT 0,
+  successful_requests integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT sites_pkey PRIMARY KEY (id),
@@ -62,8 +107,8 @@ CREATE TABLE public.transactions (
   created_at timestamp with time zone DEFAULT now(),
   pack_name text,
   CONSTRAINT transactions_pkey PRIMARY KEY (id),
-  CONSTRAINT transactions_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
-  CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+  CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT transactions_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id)
 );
 CREATE TABLE public.users (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

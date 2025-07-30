@@ -6,6 +6,99 @@ interface ValidateCrawlRequestOptions {
   backendUrl?: string;
 }
 
+// --- Known bots cache ---
+let knownBotsCache: Array<any> = [];
+let knownBotsCacheTimestamp = 0;
+const KNOWN_BOTS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+async function getKnownBots(backendUrl: string) {
+  const now = Date.now();
+  if (knownBotsCache.length && now - knownBotsCacheTimestamp < KNOWN_BOTS_CACHE_TTL) {
+    return knownBotsCache;
+  }
+  try {
+    const res = await fetch(`${backendUrl}/api/known-bots`);
+    if (res.ok) {
+      knownBotsCache = await res.json();
+      knownBotsCacheTimestamp = now;
+      return knownBotsCache;
+    }
+  } catch (err) {
+    // Fallback to last cache
+    if (knownBotsCache.length) return knownBotsCache;
+    return [];
+  }
+  return [];
+}
+
+// --- Site bot preferences cache (per site) ---
+const siteBotPrefsCache: Record<string, { prefs: any[]; ts: number }> = {};
+const SITE_PREFS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+async function getSiteBotPrefs(backendUrl: string, siteId: string) {
+  const now = Date.now();
+  if (siteBotPrefsCache[siteId] && now - siteBotPrefsCache[siteId].ts < SITE_PREFS_CACHE_TTL) {
+    return siteBotPrefsCache[siteId].prefs;
+  }
+  try {
+    const res = await fetch(`${backendUrl}/api/sites/${siteId}/bot-prefs`);
+    if (res.ok) {
+      const prefs = await res.json();
+      siteBotPrefsCache[siteId] = { prefs, ts: now };
+      return prefs;
+    }
+  } catch (err) {
+    if (siteBotPrefsCache[siteId]) return siteBotPrefsCache[siteId].prefs;
+    return [];
+  }
+  return [];
+}
+
+// --- Site lookup cache (per domain) ---
+const siteCache: Record<string, { siteId: string; ts: number }> = {};
+const SITE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getSiteByDomain(backendUrl: string, domain: string) {
+  const now = Date.now();
+  if (siteCache[domain] && now - siteCache[domain].ts < SITE_CACHE_TTL) {
+    return siteCache[domain].siteId;
+  }
+  try {
+    const res = await fetch(`${backendUrl}/api/sites/domain/${encodeURIComponent(domain)}`);
+    if (res.ok) {
+      const data = await res.json();
+      siteCache[domain] = { siteId: data.site_id, ts: now };
+      return data.site_id;
+    }
+  } catch (err) {
+    // Fallback to cached value if available
+    if (siteCache[domain]) return siteCache[domain].siteId;
+  }
+  return null;
+}
+
+// --- Bot classification helper ---
+function classifyBot(headers: Record<string, string>, userAgent: string, knownBots: any[]) {
+  // Signed bot: has crawler-id, signature-input, signature
+  if (headers['crawler-id'] && headers['signature-input'] && headers['signature']) {
+    return { type: 'signed', knownBot: null };
+  }
+  // Known bot: match user-agent
+  for (const bot of knownBots) {
+    try {
+      if (bot.user_agent_pattern && new RegExp(bot.user_agent_pattern, 'i').test(userAgent)) {
+        return { type: 'known', knownBot: bot };
+      }
+    } catch (e) {
+      // fallback to includes
+      if (userAgent.includes(bot.user_agent_pattern)) {
+        return { type: 'known', knownBot: bot };
+      }
+    }
+  }
+  // Unknown bot
+  return { type: 'unknown', knownBot: null };
+}
+
 export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
   const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'https://botwall-api.onrender.com';
 
@@ -16,99 +109,149 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
     const maxPrice = parseFloat(headers['crawler-max-price'] || '0');
     const signatureInput = headers['signature-input'] || '';
     const signature = headers['signature'] || '';
-    const knownBots = ['GPTBot', 'ClaudeBot', 'Google-Extended', 'bingbot'];
-    const isBot = (crawlerId && signatureInput && signature) || knownBots.some(bot => userAgent.includes(bot));
-    const domain = req.hostname;
+    const domain = req.hostname.split(':')[0]; // Remove port if present
     const path = req.path;
     const now = new Date().toISOString();
+    const ip = req.ip || req.connection?.remoteAddress || '';
 
-    // 1. Detect crawler
-    if (!isBot) {
-      // Not a bot, allow normal users
+    console.log(`🔍 Middleware: Processing request for domain: ${domain}`);
+
+    // --- 1. Check if this is a signed bot request ---
+    const isSignedBot = crawlerId && signatureInput && signature;
+    
+    if (isSignedBot) {
+      console.log(`🔍 Middleware: Signed bot detected: ${crawlerId}`);
+      
+      // For signed bots, use the original workflow
+      // 1. Fetch public key
+      let publicKey: string | null = null;
+      try {
+        const pkRes = await fetch(`${backendUrl}/api/bots/${encodeURIComponent(crawlerId)}/public-key`);
+        if (pkRes.ok) {
+          const pkData = await pkRes.json();
+          publicKey = pkData.publicKey || null;
+        }
+      } catch (err) {
+        console.log(`❌ Middleware: Failed to fetch public key for ${crawlerId}`);
+        return res.status(500).json({ error: 'Failed to fetch public key from backend.' });
+      }
+      
+      if (!publicKey) {
+        console.log(`❌ Middleware: No public key found for ${crawlerId}`);
+        return res.status(403).json({ error: 'Could not fetch crawler public key.' });
+      }
+
+      // 2. Verify signature
+      const validSig = verifyEd25519Signature(headers, signature, publicKey);
+      if (!validSig) {
+        console.log(`❌ Middleware: Invalid signature for ${crawlerId}`);
+        return res.status(403).json({ error: 'Invalid signature.' });
+      }
+
+      // 3. Call original verify endpoint (this handles credits, site lookup, etc.)
+      try {
+        const verifyRes = await fetch(`${backendUrl}/api/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            botId: crawlerId,
+            botApiKey: '', // Empty for signed bots
+            path: path,
+            userAgent: userAgent,
+            domain: domain // Pass domain for site lookup
+          })
+        });
+
+        if (!verifyRes.ok) {
+          const errorData = await verifyRes.json();
+          if (verifyRes.status === 402) {
+            console.log(`❌ Middleware: Insufficient credits for ${crawlerId}`);
+            return res.status(402).json({ error: 'Insufficient credits' });
+          }
+          console.log(`❌ Middleware: Verification failed for ${crawlerId}`);
+          return res.status(verifyRes.status).json(errorData);
+        }
+
+        // Note: Signed bots are logged to 'crawls' table by the verify endpoint
+        // No need to duplicate log to bot_crawl_logs
+
+        console.log(`✅ Middleware: Signed bot ${crawlerId} verified and allowed`);
+        return next();
+      } catch (err) {
+        console.log(`❌ Middleware: Verification error for ${crawlerId}:`, err);
+        return res.status(500).json({ error: 'Verification failed' });
+      }
+    }
+
+    // --- 2. Handle known/unknown bots (new analytics workflow) ---
+    console.log(`🔍 Middleware: Processing as known/unknown bot`);
+    
+    // Look up siteId by domain for known/unknown bots
+    const siteId = await getSiteByDomain(backendUrl, domain);
+    console.log(`🔍 Middleware: Site lookup result for ${domain}: ${siteId || 'NOT FOUND'}`);
+    
+    if (!siteId) {
+      // Site not found for this domain, allow request but don't log
+      console.log(`⚠️  Middleware: No site found for domain ${domain}, allowing request without logging`);
       return next();
     }
 
-    // 2. Load pricing rule from backend API
-    let price = 0.01;
-    let blocked = false;
-    try {
-      const pricingRes = await fetch(`${backendUrl}/api/sites/${encodeURIComponent(domain)}/pricing?path=${encodeURIComponent(path)}`);
-      if (pricingRes.ok) {
-        const pricingData = await pricingRes.json();
-        price = Number(pricingData.price) || 0.01;
-        blocked = !!pricingData.blocked;
+    // Fetch known bots
+    const knownBots = await getKnownBots(backendUrl);
+    const { type, knownBot } = classifyBot(headers, userAgent, knownBots);
+    console.log(`🔍 Middleware: Bot classified as ${type}${knownBot ? ` (${knownBot.name})` : ''}`);
+
+    // For known bots, check site-specific block/allow
+    if (type === 'known' && knownBot) {
+      const prefs = await getSiteBotPrefs(backendUrl, siteId);
+      const pref = prefs.find((p: any) => p.known_bot_id === knownBot.id);
+      
+      if (pref && pref.blocked) {
+        console.log(`🚫 Middleware: Blocking ${knownBot.name} for site ${siteId}`);
+        await logBotCrawl({
+          backendUrl, siteId, userAgent, botName: knownBot.name, path, status: 'blocked', ip, knownBotId: knownBot.id, headers
+        });
+        return res.status(403).json({ error: 'This bot is blocked for this site.' });
       }
-    } catch (err) {
-      return res.status(500).json({ error: 'Failed to fetch pricing from backend.' });
-    }
-    if (blocked) {
-      logCrawl(crawlerId, path, price, 'deny (blocked)', now);
-      return res.status(403).json({ error: 'Crawler is blocked for this path.' });
     }
 
-    // 3. Fetch bot's public key from backend API
-    let publicKey: string | null = null;
-    try {
-      const pkRes = await fetch(`${backendUrl}/api/bots/${encodeURIComponent(crawlerId)}/public-key`);
-      if (pkRes.ok) {
-        const pkData = await pkRes.json();
-        publicKey = pkData.publicKey || null;
-      }
-    } catch (err) {
-      return res.status(500).json({ error: 'Failed to fetch public key from backend.' });
-    }
-    if (!publicKey) {
-      logCrawl(crawlerId, path, price, 'deny (no public key)', now);
-      return res.status(403).json({ error: 'Could not fetch crawler public key.' });
-    }
-
-    // 4. Verify signature
-    const validSig = verifyEd25519Signature(headers, signature, publicKey);
-    if (!validSig) {
-      logCrawl(crawlerId, path, price, 'deny (invalid signature)', now);
-      return res.status(403).json({ error: 'Invalid signature.' });
-    }
-
-    // 5. Price negotiation
-    if (maxPrice < price) {
-      res.setHeader('pay-per-crawl-price', price.toString());
-      logCrawl(crawlerId, path, price, 'deny (price too low)', now);
-      return res.status(402).json({ error: 'Price too low for this crawl.', requiredPrice: price });
-    }
-
-    // 6. Allow
-    try {
-      // Call backend to deduct credits and log crawl
-      const recordRes = await fetch(`${backendUrl}/api/crawls/record`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          crawlerId,
-          domain,
-          path,
-          userAgent
-        })
+    // Log and allow the request
+    if (type === 'known' && knownBot) {
+      console.log(`✅ Middleware: Known bot ${knownBot.name} allowed for site ${siteId}`);
+      await logBotCrawl({
+        backendUrl, siteId, userAgent, botName: knownBot.name, path, status: 'success', ip, knownBotId: knownBot.id, headers
       });
-      if (!recordRes.ok) {
-        const err = await recordRes.json();
-        if (recordRes.status === 402) {
-          logCrawl(crawlerId, path, price, 'deny (insufficient credits)', now);
-          return res.status(402).json({ error: 'Insufficient credits' });
-        }
-        logCrawl(crawlerId, path, price, 'deny (backend error)', now);
-        return res.status(500).json({ error: 'Failed to record crawl' });
-      }
-    } catch (err) {
-      logCrawl(crawlerId, path, price, 'deny (backend error)', now);
-      return res.status(500).json({ error: 'Failed to record crawl' });
+    } else {
+      console.log(`✅ Middleware: Unknown bot allowed for site ${siteId}`);
+      await logBotCrawl({
+        backendUrl, siteId, userAgent, botName: userAgent || 'Unknown', path, status: 'success', ip, headers
+      });
     }
-    logCrawl(crawlerId, path, price, 'allow', now);
+    
     return next();
   };
 }
 
-// --- Helper: Log every request ---
-function logCrawl(crawlerId: string, url: string, price: number, decision: string, timestamp: string) {
-  // TODO: Replace with real logging (e.g., to a database or logging service)
-  console.log(`[${timestamp}] crawler-id=${crawlerId} url=${url} price=${price} decision=${decision}`);
+// --- Helper: Log every crawl to backend ---
+async function logBotCrawl({ backendUrl, siteId, userAgent, botName, path, status, ip, botId, knownBotId, headers }: any) {
+  try {
+    await fetch(`${backendUrl}/api/bot-logs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        site_id: siteId,
+        bot_id: botId,
+        known_bot_id: knownBotId,
+        user_agent: userAgent,
+        bot_name: botName,
+        path,
+        status,
+        ip_address: ip,
+        raw_headers: headers
+      })
+    });
+  } catch (err) {
+    // Fallback: log to console
+    console.log(`[${new Date().toISOString()}] Failed to log bot crawl:`, err);
+  }
 } 

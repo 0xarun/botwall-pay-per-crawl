@@ -15,6 +15,7 @@ import transactionRoutes from './routes/transactions';
 import crawlRoutes from './routes/crawls';
 import verifyRoutes from './routes/verify';
 import { Router } from 'express';
+import botAnalyticsRoutes from './routes/botAnalytics';
 
 // Load environment variables
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api/sites', siteRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/crawls', crawlRoutes);
 app.use('/api/verify', verifyRoutes);
+app.use('/api', botAnalyticsRoutes);
 
 // Expose /api/register-bot as a top-level route for bot onboarding
 let registerBotHandler = null;
