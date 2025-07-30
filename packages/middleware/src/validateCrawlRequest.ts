@@ -138,14 +138,16 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
       
       if (!publicKey) {
         console.log(`❌ Middleware: No public key found for ${crawlerId}`);
-        return res.status(403).json({ error: 'Could not fetch crawler public key.' });
+        return res.status(403).send(`This content is protected by BotWall pay-per-crawl system
+Bots must pay to access this content. Check BotWall.`);
       }
 
       // 2. Verify signature
       const validSig = verifyEd25519Signature(headers, signature, publicKey);
       if (!validSig) {
         console.log(`❌ Middleware: Invalid signature for ${crawlerId}`);
-        return res.status(403).json({ error: 'Invalid signature.' });
+        return res.status(403).send(`This content is protected by BotWall pay-per-crawl system
+Bots must pay to access this content. Check BotWall.`);
       }
 
       // 3. Call original verify endpoint (this handles credits, site lookup, etc.)
@@ -166,10 +168,12 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
           const errorData = await verifyRes.json();
           if (verifyRes.status === 402) {
             console.log(`❌ Middleware: Insufficient credits for ${crawlerId}`);
-            return res.status(402).json({ error: 'Insufficient credits' });
+            return res.status(402).send(`This content is protected by BotWall pay-per-crawl system
+Bots must pay to access this content. Check BotWall.`);
           }
           console.log(`❌ Middleware: Verification failed for ${crawlerId}`);
-          return res.status(verifyRes.status).json(errorData);
+          return res.status(verifyRes.status).send(`This content is protected by BotWall pay-per-crawl system
+Bots must pay to access this content. Check BotWall.`);
         }
 
         // Note: Signed bots are logged to 'crawls' table by the verify endpoint
@@ -211,7 +215,8 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
         await logBotCrawl({
           backendUrl, siteId, userAgent, botName: knownBot.name, path, status: 'blocked', ip, knownBotId: knownBot.id, headers
         });
-        return res.status(403).json({ error: 'This bot is blocked for this site.' });
+        return res.status(403).send(`This content is protected by BotWall pay-per-crawl system
+Bots must pay to access this content. Check BotWall.`);
       }
     }
 
