@@ -109,7 +109,20 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
     const maxPrice = parseFloat(headers['crawler-max-price'] || '0');
     const signatureInput = headers['signature-input'] || '';
     const signature = headers['signature'] || '';
-    const domain = req.hostname.split(':')[0]; // Remove port if present
+    // Extract domain with fallbacks for different environments
+    let domain = '';
+    if (req.hostname) {
+      domain = req.hostname.split(':')[0];
+    } else if (req.headers.host) {
+      const host = Array.isArray(req.headers.host) ? req.headers.host[0] : req.headers.host;
+      domain = host.split(':')[0];
+    } else if (req.headers['x-forwarded-host']) {
+      const forwardedHost = Array.isArray(req.headers['x-forwarded-host']) ? req.headers['x-forwarded-host'][0] : req.headers['x-forwarded-host'];
+      domain = forwardedHost.split(':')[0];
+    } else {
+      // Fallback for edge functions or environments without hostname
+      domain = 'unknown';
+    }
     const path = req.path;
     const now = new Date().toISOString();
     const ip = req.ip || req.connection?.remoteAddress || '';
