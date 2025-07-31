@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { API_BASE_URL } from '../lib/utils';
 
 interface User {
   id: string;
@@ -29,10 +30,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// Use VITE_BACKEND_URL from environment, fallback to '/api' for relative proxy in dev
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || '/api';
-// To set: add VITE_BACKEND_URL=http://localhost:3001/api (or your prod URL) to your .env file
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
