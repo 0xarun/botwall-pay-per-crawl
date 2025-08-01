@@ -52,7 +52,6 @@ export type Config = typeof config;
 // Validation function to ensure required environment variables are set
 export function validateConfig(): void {
   const required = [
-    'JWT_SECRET',
     'DATABASE_URL',
   ];
 
