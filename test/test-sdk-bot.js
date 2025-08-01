@@ -17,7 +17,7 @@ headers['signature'] = signRequest(headers, PRIVATE_KEY);
 
 (async () => {
   try {
-    const response = await sendCrawlRequest('http://localhost:3002/api/protected', headers, PRIVATE_KEY);
+    const response = await sendCrawlRequest('https://api.roastmygram.fun/health', headers, PRIVATE_KEY);
     const data = await response.json();
     console.log('Response from protected endpoint:', data);
   } catch (err) {

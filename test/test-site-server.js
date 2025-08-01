@@ -10,7 +10,7 @@ app.get('/health', (req, res) => {
 
 // Use the validateCrawlRequest middleware with backend URL configuration
 app.get('/api/protected', validateCrawlRequest({
-  backendUrl: 'https://botwall-backend.onrender.com' // Point to your backend
+  backendUrl: 'http://localhost:3001'
 }), (req, res) => {
   res.json({ message: 'Protected data for bots only!' });
 });

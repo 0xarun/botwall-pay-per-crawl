@@ -187,6 +187,31 @@ router.get('/sites/domain/:domain', async (req: Request, res: Response) => {
   }
 });
 
+// GET /sites/site-id/:siteId - Look up site by site ID
+router.get('/sites/site-id/:siteId', async (req: Request, res: Response) => {
+  try {
+    const { siteId } = req.params;
+    const site = await queryOne(
+      'SELECT id, name, site_id, frontend_domain, backend_domain, price_per_crawl FROM sites WHERE site_id = $1',
+      [siteId]
+    );
+    if (!site) {
+      return res.status(404).json({ error: 'Site not found for this site ID' });
+    }
+    res.json({ 
+      site_id: site.id, 
+      name: site.name, 
+      site_id_string: site.site_id,
+      frontend_domain: site.frontend_domain,
+      backend_domain: site.backend_domain,
+      price_per_crawl: site.price_per_crawl
+    });
+  } catch (error) {
+    console.error('Error looking up site by site ID:', error);
+    res.status(500).json({ error: 'Failed to look up site' });
+  }
+});
+
 // GET /analytics/overview - Comprehensive analytics overview
 router.get('/analytics/overview', async (req: Request, res: Response) => {
   try {

@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { query, queryOne } from '../models/db';
 import { authenticateToken, requireSiteOwner } from '../middleware/auth';
 import crypto from 'crypto';
+import { generateSiteId } from '../utils/siteIdGenerator';
+import { generateMiddlewareCode, generateInstallationInstructions } from '../utils/codeGenerator';
 
 const router = Router();
 
@@ -25,28 +27,56 @@ router.get('/', authenticateToken, requireSiteOwner, async (req: Request, res: R
 // Create a new site
 router.post('/', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
   try {
-    const { name, domain, price_per_crawl } = req.body;
-    if (!name || !domain) {
+    const { 
+      name, 
+      frontend_domain, 
+      backend_domain, 
+      monetized_routes = ['/*'], 
+      price_per_crawl = 0.01 
+    } = req.body;
+    
+    if (!name || !frontend_domain || !backend_domain) {
       return res.status(400).json({
         error: 'Missing required fields',
-        message: 'Name and domain are required.'
+        message: 'Name, frontend domain, and backend domain are required.'
       });
     }
-    // Check for domain conflict
-    const domainConflict = await queryOne(
-      'SELECT id FROM sites WHERE domain = $1',
-      [domain]
+    
+    // Check for domain conflicts
+    const frontendConflict = await queryOne(
+      'SELECT id FROM sites WHERE frontend_domain = $1 OR backend_domain = $1',
+      [frontend_domain]
     );
-    if (domainConflict) {
+    if (frontendConflict) {
       return res.status(409).json({
         error: 'Domain conflict',
-        message: 'A site with this domain already exists.'
+        message: 'A site with this frontend domain already exists.'
       });
     }
+    
+    const backendConflict = await queryOne(
+      'SELECT id FROM sites WHERE frontend_domain = $1 OR backend_domain = $1',
+      [backend_domain]
+    );
+    if (backendConflict) {
+      return res.status(409).json({
+        error: 'Domain conflict',
+        message: 'A site with this backend domain already exists.'
+      });
+    }
+    
     const id = crypto.randomUUID();
+    const siteId = generateSiteId();
+    
     await query(
-      'INSERT INTO sites (id, owner_id, name, domain, price_per_crawl, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, now(), now())',
-      [id, req.user!.id, name, domain, price_per_crawl || 0.01]
+      `INSERT INTO sites (
+        id, owner_id, name, domain, site_id, frontend_domain, backend_domain, 
+        monetized_routes, analytics_routes, price_per_crawl, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now())`,
+      [
+        id, req.user!.id, name, frontend_domain, siteId, frontend_domain, backend_domain,
+        JSON.stringify(monetized_routes), JSON.stringify(['/*']), price_per_crawl
+      ]
     );
     
     // Create middleware verification record
@@ -57,9 +87,22 @@ router.post('/', authenticateToken, requireSiteOwner, async (req: Request, res: 
     );
     
     const site = await queryOne('SELECT * FROM sites WHERE id = $1', [id]);
+    
+    // Generate middleware code
+    const middlewareCode = generateMiddlewareCode({
+      siteId,
+      monetizedRoutes: monetized_routes,
+      pricePerCrawl: price_per_crawl
+    });
+    
+    const instructions = generateInstallationInstructions(name, backend_domain);
+    
     res.status(201).json({
       message: 'Site created successfully',
-      site
+      site,
+      siteId,
+      middlewareCode,
+      instructions
     });
   } catch (error) {
     console.error('Create site error:', error);
@@ -268,6 +311,128 @@ router.get('/:id/middleware-status', authenticateToken, requireSiteOwner, async 
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to fetch middleware status.'
+    });
+  }
+});
+
+// --- SITE ID BASED ENDPOINTS ---
+
+// Get site configuration by site ID (for middleware)
+router.get('/config/:siteId', async (req: Request, res: Response) => {
+  try {
+    const { siteId } = req.params;
+    const { hostname } = req.query;
+    
+    const site = await queryOne(
+      'SELECT site_id, frontend_domain, backend_domain, monetized_routes, analytics_routes, price_per_crawl FROM sites WHERE site_id = $1',
+      [siteId]
+    );
+    
+    if (!site) {
+      return res.status(404).json({ error: 'Site not found' });
+    }
+    
+    // Verify domain authorization
+    if (hostname && site.frontend_domain !== hostname && site.backend_domain !== hostname) {
+      return res.status(403).json({ error: 'Domain not authorized' });
+    }
+    
+    res.json({
+      siteId: site.site_id,
+      frontendDomain: site.frontend_domain,
+      backendDomain: site.backend_domain,
+      monetizedRoutes: site.monetized_routes,
+      analyticsRoutes: site.analytics_routes,
+      pricePerCrawl: Number(site.price_per_crawl)
+    });
+  } catch (error) {
+    console.error('Get site config error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get generated middleware code for a site
+router.get('/:id/code', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    const site = await queryOne(
+      'SELECT * FROM sites WHERE id = $1 AND owner_id = $2',
+      [id, req.user!.id]
+    );
+    
+    if (!site) {
+      return res.status(404).json({
+        error: 'Site not found',
+        message: 'Site does not exist or you do not have access to it.'
+      });
+    }
+    
+    const middlewareCode = generateMiddlewareCode({
+      siteId: site.site_id,
+      monetizedRoutes: site.monetized_routes,
+      pricePerCrawl: Number(site.price_per_crawl)
+    });
+    
+    const instructions = generateInstallationInstructions(site.name, site.backend_domain);
+    
+    res.json({
+      siteId: site.site_id,
+      middlewareCode,
+      instructions,
+      site
+    });
+  } catch (error) {
+    console.error('Get middleware code error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate middleware code.'
+    });
+  }
+});
+
+// Update site routes configuration
+router.put('/:id/routes', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { monetized_routes, analytics_routes } = req.body;
+    
+    const site = await queryOne(
+      'SELECT id FROM sites WHERE id = $1 AND owner_id = $2',
+      [id, req.user!.id]
+    );
+    
+    if (!site) {
+      return res.status(404).json({
+        error: 'Site not found',
+        message: 'Site does not exist or you do not have access to it.'
+      });
+    }
+    
+    await query(
+      'UPDATE sites SET monetized_routes = $1, analytics_routes = $2, updated_at = now() WHERE id = $3',
+      [JSON.stringify(monetized_routes), JSON.stringify(analytics_routes), id]
+    );
+    
+    const updatedSite = await queryOne('SELECT * FROM sites WHERE id = $1', [id]);
+    
+    // Regenerate middleware code
+    const middlewareCode = generateMiddlewareCode({
+      siteId: updatedSite.site_id,
+      monetizedRoutes: updatedSite.monetized_routes,
+      pricePerCrawl: Number(updatedSite.price_per_crawl)
+    });
+    
+    res.json({
+      message: 'Routes updated successfully',
+      site: updatedSite,
+      middlewareCode
+    });
+  } catch (error) {
+    console.error('Update routes error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to update routes.'
     });
   }
 });

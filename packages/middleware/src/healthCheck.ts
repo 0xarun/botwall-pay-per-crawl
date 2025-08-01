@@ -48,7 +48,7 @@ export class MiddlewareHealthChecker {
       this.sendHealthCheck();
     }, this.options.intervalMs);
 
-    console.log(`🔍 Middleware health checker started (interval: ${this.options.intervalMs / 1000}s)`);
+    console.log(`🔍 Middleware health checker started (interval: ${this.options.intervalMs! / 1000}s)`);
   }
 
   /**
@@ -74,7 +74,7 @@ export class MiddlewareHealthChecker {
    */
   async sendHealthCheck(): Promise<HealthCheckResult> {
     try {
-      const url = `${this.options.backendUrl}/api/sites/${this.options.siteId}/health-check?token=${this.options.verificationToken}`;
+      let url = `${this.options.backendUrl}/api/sites/${this.options.siteId}/health-check?token=${this.options.verificationToken}`;
       
       if (this.options.middlewareVersion) {
         url += `&version=${encodeURIComponent(this.options.middlewareVersion)}`;

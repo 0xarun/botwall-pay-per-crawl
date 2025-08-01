@@ -9,6 +9,11 @@ export interface Site {
   owner_id: string;
   name: string;
   domain: string;
+  site_id?: string;
+  frontend_domain?: string;
+  backend_domain?: string;
+  monetized_routes?: string[];
+  analytics_routes?: string[];
   price_per_crawl: number;
   created_at: string;
   updated_at: string;
@@ -16,8 +21,10 @@ export interface Site {
 
 export interface CreateSiteData {
   name: string;
-  domain: string;
-  price_per_crawl: number;
+  frontend_domain: string;
+  backend_domain: string;
+  monetized_routes?: string[];
+  price_per_crawl?: number;
 }
 
 export interface UpdateSiteData {
@@ -163,6 +170,58 @@ export function useSites() {
     }
   });
 
+  // Get middleware code for a site
+  const getMiddlewareCode = async (siteId: string) => {
+    const response = await fetch(`${API_BASE_URL}/sites/${siteId}/code`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to get middleware code');
+    }
+
+    return await response.json();
+  };
+
+  // Update site routes
+  const updateSiteRoutesMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { monetized_routes: string[]; analytics_routes: string[] } }): Promise<Site> => {
+      const response = await fetch(`${API_BASE_URL}/sites/${id}/routes`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to update site routes');
+      }
+
+      const updatedSite = await response.json();
+      return updatedSite;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sites', user?.id] });
+      toast({
+        title: 'Routes updated successfully',
+        description: 'Your site routes have been updated.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Failed to update routes',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  });
+
   return {
     sites,
     isLoading,
@@ -170,8 +229,11 @@ export function useSites() {
     createSite: createSiteMutation.mutate,
     updateSite: updateSiteMutation.mutate,
     deleteSite: deleteSiteMutation.mutate,
+    updateSiteRoutes: updateSiteRoutesMutation.mutate,
+    getMiddlewareCode,
     isCreating: createSiteMutation.isPending,
     isUpdating: updateSiteMutation.isPending,
-    isDeleting: deleteSiteMutation.isPending
+    isDeleting: deleteSiteMutation.isPending,
+    isUpdatingRoutes: updateSiteRoutesMutation.isPending
   };
 } 

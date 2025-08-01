@@ -2,8 +2,11 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyEd25519Signature } from './verifyEd25519Signature';
 import fetch from 'node-fetch';
 
-interface ValidateCrawlRequestOptions {
+export interface ValidateCrawlRequestOptions {
   backendUrl?: string;
+  siteId?: string;
+  monetizedRoutes?: string[];
+  pricePerCrawl?: number;
 }
 
 // --- Known bots cache ---
@@ -76,6 +79,90 @@ async function getSiteByDomain(backendUrl: string, domain: string) {
   return null;
 }
 
+// --- Site configuration cache (per site ID) ---
+const siteConfigCache: Record<string, { config: any; ts: number }> = {};
+const SITE_CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getSiteConfig(backendUrl: string, siteId: string, hostname: string) {
+  const now = Date.now();
+  const cacheKey = `${siteId}:${hostname}`;
+  
+  if (siteConfigCache[cacheKey] && now - siteConfigCache[cacheKey].ts < SITE_CONFIG_CACHE_TTL) {
+    return siteConfigCache[cacheKey].config;
+  }
+  
+  try {
+    const res = await fetch(`${backendUrl}/api/sites/config/${siteId}?hostname=${encodeURIComponent(hostname)}`);
+    if (res.ok) {
+      const config = await res.json();
+      siteConfigCache[cacheKey] = { config, ts: now };
+      return config;
+    }
+  } catch (err) {
+    if (siteConfigCache[cacheKey]) return siteConfigCache[cacheKey].config;
+  }
+  return null;
+}
+
+// --- Route matching helper ---
+function isMonetizedRoute(path: string, monetizedRoutes: string[]): boolean {
+  for (const route of monetizedRoutes) {
+    // Convert glob pattern to regex
+    const pattern = route
+      .replace(/\./g, '\\.')  // Escape dots
+      .replace(/\*/g, '.*')   // Convert * to .*
+      .replace(/\?/g, '\\.')  // Convert ? to .
+      .replace(/\[/g, '\\[')  // Escape brackets
+      .replace(/\]/g, '\\]');
+    
+    const regex = new RegExp(`^${pattern}$`);
+    if (regex.test(path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// --- Bot detection helper ---
+function isBotRequest(userAgent: string): boolean {
+  const botPatterns = [
+    /bot/i, /crawler/i, /spider/i, /scraper/i, /gpt/i, /chatgpt/i, /claude/i, /anthropic/i,
+    /bingbot/i, /googlebot/i, /slurp/i, /duckduckbot/i, /baiduspider/i, /yandexbot/i,
+    /facebookexternalhit/i, /twitterbot/i, /linkedinbot/i, /whatsapp/i, /telegrambot/i
+  ];
+  
+  return botPatterns.some(pattern => pattern.test(userAgent));
+}
+
+// --- Bot name extraction helper ---
+function getBotName(userAgent: string): string {
+  const knownBots = [
+    { pattern: /gptbot/i, name: 'GPTBot' },
+    { pattern: /chatgpt/i, name: 'ChatGPT' },
+    { pattern: /claude/i, name: 'Claude' },
+    { pattern: /anthropic/i, name: 'Anthropic' },
+    { pattern: /bingbot/i, name: 'BingBot' },
+    { pattern: /googlebot/i, name: 'GoogleBot' },
+    { pattern: /slurp/i, name: 'Yahoo Slurp' },
+    { pattern: /duckduckbot/i, name: 'DuckDuckBot' },
+    { pattern: /baiduspider/i, name: 'BaiduSpider' },
+    { pattern: /yandexbot/i, name: 'YandexBot' },
+    { pattern: /facebookexternalhit/i, name: 'Facebook' },
+    { pattern: /twitterbot/i, name: 'TwitterBot' },
+    { pattern: /linkedinbot/i, name: 'LinkedInBot' },
+    { pattern: /whatsapp/i, name: 'WhatsApp' },
+    { pattern: /telegrambot/i, name: 'TelegramBot' }
+  ];
+  
+  for (const bot of knownBots) {
+    if (bot.pattern.test(userAgent)) {
+      return bot.name;
+    }
+  }
+  
+  return userAgent || 'Unknown Bot';
+}
+
 // --- Bot classification helper ---
 function classifyBot(headers: Record<string, string>, userAgent: string, knownBots: any[]) {
   // Signed bot: has crawler-id, signature-input, signature
@@ -100,7 +187,10 @@ function classifyBot(headers: Record<string, string>, userAgent: string, knownBo
 }
 
 export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
-  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'http://localhost:3000';
+  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'http://localhost:3001';
+  const configSiteId = options?.siteId;
+  const configMonetizedRoutes = options?.monetizedRoutes || ['/*'];
+  const configPricePerCrawl = options?.pricePerCrawl || 0.01;
 
   return async function (req: Request, res: Response, next: NextFunction) {
     const headers = Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v[0] : v || '']));
@@ -129,6 +219,64 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
 
     console.log(`🔍 Middleware: Processing request for domain: ${domain}`);
 
+    // --- 0. Site ID-based validation (new system) ---
+    if (configSiteId) {
+      console.log(`🔍 Middleware: Using site ID-based validation: ${configSiteId}`);
+      
+      try {
+        // Get site configuration from database
+        const siteConfig = await getSiteConfig(backendUrl, configSiteId, domain);
+        
+        if (!siteConfig) {
+          console.log(`❌ Middleware: Site configuration not found for site ID: ${configSiteId}`);
+          return res.status(403).send('Domain not authorized');
+        }
+        
+        // Verify domain authorization
+        if (siteConfig.frontendDomain !== domain && siteConfig.backendDomain !== domain) {
+          console.log(`❌ Middleware: Domain ${domain} not authorized for site ID: ${configSiteId}`);
+          return res.status(403).send('Domain not authorized');
+        }
+        
+        // Always record analytics for bot requests
+        if (isBotRequest(userAgent)) {
+          await logBotCrawl({
+            backendUrl, 
+            siteId: siteConfig.siteId, 
+            userAgent, 
+            botName: getBotName(userAgent), 
+            path, 
+            status: 'success', 
+            ip, 
+            headers
+          });
+        }
+        
+        // Check if this is a monetized route
+        const monetizedRoutes = siteConfig.monetizedRoutes || configMonetizedRoutes;
+        if (isMonetizedRoute(path, monetizedRoutes)) {
+          console.log(`💰 Middleware: Monetized route detected: ${path}`);
+          
+          // For signed bots, use existing verification
+          if (crawlerId && signatureInput && signature) {
+            // Continue with signed bot verification
+            console.log(`🔍 Middleware: Signed bot on monetized route: ${crawlerId}`);
+          } else {
+            // For unsigned bots, block access to monetized routes
+            console.log(`🚫 Middleware: Blocking unsigned bot on monetized route: ${path}`);
+            return res.status(402).send('Insufficient credits - Please purchase credits to access this API');
+          }
+        } else {
+          console.log(`✅ Middleware: Non-monetized route, allowing access: ${path}`);
+          return next();
+        }
+      } catch (error) {
+        console.error(`❌ Middleware: Error in site ID validation:`, error);
+        // Fallback to allow request
+        return next();
+      }
+    }
+
     // --- 1. Check if this is a signed bot request ---
     const isSignedBot = crawlerId && signatureInput && signature;
     
@@ -139,13 +287,22 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
       // 1. Fetch public key
       let publicKey: string | null = null;
       try {
-        const pkRes = await fetch(`${backendUrl}/api/bots/${encodeURIComponent(crawlerId)}/public-key`);
+        const publicKeyUrl = `${backendUrl}/api/bots/${encodeURIComponent(crawlerId)}/public-key`;
+        console.log(`🔍 Middleware: Fetching public key from: ${publicKeyUrl}`);
+        
+        const pkRes = await fetch(publicKeyUrl);
+        console.log(`🔍 Middleware: Public key response status: ${pkRes.status}`);
+        
         if (pkRes.ok) {
           const pkData = await pkRes.json();
+          console.log(`🔍 Middleware: Public key response data:`, pkData);
           publicKey = pkData.publicKey || null;
+        } else {
+          const errorText = await pkRes.text();
+          console.log(`❌ Middleware: Public key fetch failed with status ${pkRes.status}: ${errorText}`);
         }
       } catch (err) {
-        console.log(`❌ Middleware: Failed to fetch public key for ${crawlerId}`);
+        console.log(`❌ Middleware: Failed to fetch public key for ${crawlerId}:`, err);
         return res.status(500).json({ error: 'Failed to fetch public key from backend.' });
       }
       

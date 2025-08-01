@@ -8,7 +8,7 @@ import { Tabs as UITabs, TabsList as UITabsList, TabsTrigger as UITabsTrigger, T
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pagination } from '@/components/ui/pagination';
 import { BrowserFilter } from '@/components/ui/browser-filter';
-import { Plus, Globe, DollarSign, Activity, Settings, Trash2, Copy, ExternalLink, BarChart3, CreditCard, TrendingUp, Users, Bot, Shield } from 'lucide-react';
+import { Plus, Globe, DollarSign, Activity, Settings, Trash2, Copy, ExternalLink, BarChart3, CreditCard, TrendingUp, Users, Bot, Shield, Code } from 'lucide-react';
 import { CreateSiteForm } from '@/components/forms/CreateSiteForm';
 import { SiteCredentials } from '@/components/SiteCredentials';
 import { PaymentAnalytics } from '@/components/PaymentAnalytics';
@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 
 export default function SiteOwnerDashboard() {
   const { user, signOut } = useAuth();
-  const { sites, isLoading: isLoadingSites, createSite, deleteSite } = useSites();
+  const { sites, isLoading: isLoadingSites, createSite, deleteSite, getMiddlewareCode } = useSites();
   
   // Pagination and filtering state
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,6 +91,47 @@ export default function SiteOwnerDashboard() {
       title: 'Sites refreshed',
       description: 'Site list and prices updated.',
     });
+  };
+
+  const handleGetMiddlewareCode = async (siteId: string) => {
+    try {
+      const result = await getMiddlewareCode(siteId);
+      // Open a new window/tab with the code
+      const newWindow = window.open('', '_blank');
+      if (newWindow) {
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title>BotWall Middleware Code - ${result.siteId}</title>
+              <style>
+                body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+                pre { background: #2a2a2a; padding: 20px; border-radius: 8px; overflow-x: auto; }
+                .header { margin-bottom: 20px; }
+                .instructions { background: #2a2a2a; padding: 20px; border-radius: 8px; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>BotWall Middleware Code</h1>
+                <p>Site ID: ${result.siteId}</p>
+              </div>
+              <pre><code>${result.middlewareCode}</code></pre>
+              <div class="instructions">
+                <h3>Installation Instructions:</h3>
+                <pre>${result.instructions}</pre>
+              </div>
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+    } catch (error) {
+      toast({
+        title: 'Failed to get middleware code',
+        description: 'Please try again later.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleToggleBotPreference = async (botId: string, blocked: boolean) => {
@@ -334,15 +375,27 @@ export default function SiteOwnerDashboard() {
                 <Card key={site.id} className="border-border/50">
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                                              <div className="flex items-center space-x-4">
                         <Globe className="h-8 w-8 text-primary" />
                         <div>
                           <CardTitle className="flex items-center gap-2">
                             {site.name}
                           </CardTitle>
+                          {site.site_id && (
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                                {site.site_id}
+                              </span>
+                            </div>
+                          )}
                           <CardDescription className="flex items-center gap-2 mt-1">
                             <ExternalLink className="h-4 w-4" />
-                            {site.domain}
+                            {site.frontend_domain || site.domain}
+                            {site.backend_domain && site.backend_domain !== site.frontend_domain && (
+                              <span className="text-xs text-muted-foreground">
+                                (API: {site.backend_domain})
+                              </span>
+                            )}
                           </CardDescription>
                         </div>
                         </div>
@@ -376,8 +429,31 @@ export default function SiteOwnerDashboard() {
                         </div>
                       </div>
                       
+                      {site.monetized_routes && site.monetized_routes.length > 0 && (
+                        <div>
+                          <span className="text-muted-foreground text-sm">💰 Monetized Routes:</span>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {site.monetized_routes.map((route: string, index: number) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {route}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="flex gap-2">
                         <SiteCredentials site={site} />
+                        {site.site_id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGetMiddlewareCode(site.id)}
+                          >
+                            <Code className="h-4 w-4 mr-2" />
+                            Get Code
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
