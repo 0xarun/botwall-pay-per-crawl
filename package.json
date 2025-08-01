@@ -9,10 +9,12 @@
     "packages/middleware"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspaces",
-    "test": "npm run test --workspaces",
-    "install:all": "npm install"
+    "setup": "node scripts/setup-env.js",
+    "dev:backend": "cd packages/backend && npm run dev",
+    "dev:frontend": "cd dashboard && npm run dev",
+    "build:backend": "cd packages/backend && npm run build",
+    "build:frontend": "cd dashboard && npm run build",
+    "install:all": "npm install && cd packages/backend && npm install && cd ../../dashboard && npm install"
   },
   "dependencies": {
     "framer-motion": "^12.23.6"

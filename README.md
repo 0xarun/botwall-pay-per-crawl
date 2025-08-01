@@ -190,19 +190,40 @@ botwall-pay-per-crawl/
 
 ## 🌱 Environment Setup
 
-### Backend `.env` Example
+### Quick Start
+1. Copy environment example files:
+   ```bash
+   cp dashboard/env.example dashboard/.env.local
+   cp packages/backend/env.example packages/backend/.env
+   ```
+2. Update the variables in each file for your environment
+3. See [DEPLOYMENT.md](./DEPLOYMENT.md) for production setup
+
+### Frontend Environment (Dashboard)
+Copy `dashboard/env.example` to `dashboard/.env.local` and configure:
+```bash
+VITE_BACKEND_URL=http://localhost:3001/api  # Development
+# VITE_BACKEND_URL=https://your-api-domain.com/api  # Production
 ```
+
+### Backend Environment
+Copy `packages/backend/env.example` to `packages/backend/.env` and configure:
+```bash
 PORT=3001
 NODE_ENV=development
+DATABASE_URL=your_postgres_connection_string
 JWT_SECRET=your-super-secret-jwt-key
 FRONTEND_URL=http://localhost:5173
-SUPABASE_DB_URL=your_postgres_connection_string
-LEMONSQUEEZY_API_KEY=your_lemon_api_key (optional)
-LEMONSQUEEZY_STORE_ID=your_lemon_store_id (optional)
-LEMONSQUEEZY_WEBHOOK_SECRET=your_lemon_webhook_secret (optional)
 ```
-- Only the first four are required for local development.
-- The LemonSqueezy variables are only needed for real payment integration.
+
+### Required Variables
+- **Backend**: `DATABASE_URL`, `JWT_SECRET`
+- **Frontend**: `VITE_BACKEND_URL` (optional, has defaults)
+
+### Optional Variables
+- LemonSqueezy payment integration
+- Feature flags for mock credits and analytics
+- Logging configuration
 
 ---
 

@@ -60,6 +60,21 @@ CREATE TABLE public.known_bots (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT known_bots_pkey PRIMARY KEY (id)
 );
+CREATE TABLE public.middleware_verification (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL,
+  status text NOT NULL CHECK (status = ANY (ARRAY['installed'::text, 'not_installed'::text, 'error'::text, 'unknown'::text])),
+  last_check timestamp with time zone DEFAULT now(),
+  last_successful_check timestamp with time zone,
+  verification_token text NOT NULL,
+  middleware_version text,
+  error_message text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT middleware_verification_pkey PRIMARY KEY (id),
+  CONSTRAINT middleware_verification_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT middleware_verification_site_id_unique UNIQUE (site_id)
+);
 CREATE TABLE public.profiles (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL UNIQUE,

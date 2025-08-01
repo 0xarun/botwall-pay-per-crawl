@@ -100,7 +100,7 @@ function classifyBot(headers: Record<string, string>, userAgent: string, knownBo
 }
 
 export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
-  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'https://botwall-api.onrender.com';
+  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'http://localhost:3000';
 
   return async function (req: Request, res: Response, next: NextFunction) {
     const headers = Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v[0] : v || '']));

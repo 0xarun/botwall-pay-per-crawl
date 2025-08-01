@@ -2,8 +2,8 @@
   "name": "@botwall/middleware",
   "version": "1.2.2",
   "description": "Express middleware for protecting your API routes with pay-per-crawl, signature verification, bot analytics, and intelligent bot management.",
-  "main": "dist/validateCrawlRequest.js",
-  "types": "dist/validateCrawlRequest.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc"
   },

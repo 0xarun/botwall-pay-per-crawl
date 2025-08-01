@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query, queryOne } from '../models/db';
 import { authenticateToken, requireSiteOwner, requireBotDeveloper } from '../middleware/auth';
+import { getBrowserFilterSQL } from '../utils/browserFilter';
 
 const router = Router();
 
@@ -13,7 +14,35 @@ const router = Router();
  */
 router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Request, res: Response) => {
   try {
-    // Query both crawls and bot_crawl_logs tables
+    // Get pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+    
+    // Get browser filter parameter
+    const excludeBrowsers = req.query.excludeBrowsers !== 'false'; // Default to true
+    
+    // Get browser filter SQL
+    const browserFilter = getBrowserFilterSQL(excludeBrowsers);
+    
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total FROM (
+        SELECT c.id FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        JOIN sites s ON c.site_id = s.id
+        WHERE s.owner_id = $1 ${browserFilter}
+        UNION ALL
+        SELECT bcl.id FROM bot_crawl_logs bcl
+        JOIN sites s ON bcl.site_id = s.id
+        WHERE s.owner_id = $1 ${browserFilter}
+      ) as combined_crawls
+    `;
+    
+    const countResult = await queryOne(countQuery, [req.user!.id]);
+    const total = parseInt(countResult.total);
+    
+    // Query both crawls and bot_crawl_logs tables with pagination and filtering
     const crawls = await query(`
       SELECT 
         c.id,
@@ -29,7 +58,7 @@ router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Reque
       FROM crawls c
       JOIN bots b ON c.bot_id = b.id
       JOIN sites s ON c.site_id = s.id
-      WHERE s.owner_id = $1
+      WHERE s.owner_id = $1 ${browserFilter}
       UNION ALL
       SELECT 
         bcl.id,
@@ -44,13 +73,25 @@ router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Reque
         s.domain as site_domain
       FROM bot_crawl_logs bcl
       JOIN sites s ON bcl.site_id = s.id
-      WHERE s.owner_id = $1
+      WHERE s.owner_id = $1 ${browserFilter}
       ORDER BY timestamp DESC
-      LIMIT 100
-    `, [req.user!.id]);
+      LIMIT $2 OFFSET $3
+    `, [req.user!.id, limit, offset]);
+    
     res.json({
       message: 'Crawls fetched successfully.',
-      crawls
+      crawls,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      },
+      filters: {
+        excludeBrowsers
+      }
     });
   } catch (error) {
     console.error('Get site crawls error:', error);
@@ -70,8 +111,36 @@ router.get('/site-owner', authenticateToken, requireSiteOwner, async (req: Reque
  */
 router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req: Request, res: Response) => {
   try {
-    // Query both crawls and bot_crawl_logs tables
-    // Note: bot_crawl_logs only includes signed bots (bot_id is not NULL)
+    // Get pagination parameters
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+    
+    // Get browser filter parameter
+    const excludeBrowsers = req.query.excludeBrowsers !== 'false'; // Default to true
+    
+    // Get browser filter SQL
+    const browserFilter = getBrowserFilterSQL(excludeBrowsers);
+    
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total FROM (
+        SELECT c.id FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        JOIN sites s ON c.site_id = s.id
+        WHERE b.developer_id = $1 ${browserFilter}
+        UNION ALL
+        SELECT bcl.id FROM bot_crawl_logs bcl
+        JOIN sites s ON bcl.site_id = s.id
+        JOIN bots b ON bcl.bot_id = b.id
+        WHERE b.developer_id = $1 AND bcl.bot_id IS NOT NULL ${browserFilter}
+      ) as combined_crawls
+    `;
+    
+    const countResult = await queryOne(countQuery, [req.user!.id]);
+    const total = parseInt(countResult.total);
+    
+    // Query both crawls and bot_crawl_logs tables with pagination and filtering
     const crawls = await query(`
       SELECT 
         c.id,
@@ -87,7 +156,7 @@ router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req:
       FROM crawls c
       JOIN bots b ON c.bot_id = b.id
       JOIN sites s ON c.site_id = s.id
-      WHERE b.developer_id = $1
+      WHERE b.developer_id = $1 ${browserFilter}
       UNION ALL
       SELECT 
         bcl.id,
@@ -103,13 +172,25 @@ router.get('/bot-developer', authenticateToken, requireBotDeveloper, async (req:
       FROM bot_crawl_logs bcl
       JOIN sites s ON bcl.site_id = s.id
       JOIN bots b ON bcl.bot_id = b.id
-      WHERE b.developer_id = $1 AND bcl.bot_id IS NOT NULL
+      WHERE b.developer_id = $1 AND bcl.bot_id IS NOT NULL ${browserFilter}
       ORDER BY timestamp DESC
-      LIMIT 100
-    `, [req.user!.id]);
+      LIMIT $2 OFFSET $3
+    `, [req.user!.id, limit, offset]);
+    
     res.json({
       message: 'Crawls fetched successfully.',
-      crawls
+      crawls,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      },
+      filters: {
+        excludeBrowsers
+      }
     });
   } catch (error) {
     console.error('Get bot crawls error:', error);

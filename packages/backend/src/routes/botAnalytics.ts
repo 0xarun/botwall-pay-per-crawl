@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query, queryOne } from '../models/db';
 import { v4 as uuidv4 } from 'uuid';
+import { getBrowserFilterSQL } from '../utils/browserFilter';
 
 const router = Router();
 
@@ -269,13 +270,16 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
 // GET /analytics/popular-bots - Top bots by activity
 router.get('/analytics/popular-bots', async (req: Request, res: Response) => {
   try {
-    const { site_id, days = 7 } = req.query;
+    const { site_id, days = 7, excludeBrowsers = 'true' } = req.query;
     if (!site_id) {
       return res.status(400).json({ error: 'site_id is required' });
     }
 
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+    
+    // Get browser filter SQL
+    const browserFilter = getBrowserFilterSQL(excludeBrowsers === 'true');
 
     const popularBots = await query(`
       SELECT 
@@ -284,11 +288,12 @@ router.get('/analytics/popular-bots', async (req: Request, res: Response) => {
         COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
         COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests
       FROM (
-        SELECT bot_name, status FROM bot_crawl_logs WHERE site_id = $1 AND timestamp >= $2
+        SELECT bot_name, status FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2 ${browserFilter}
         UNION ALL
         SELECT b.bot_name, c.status FROM crawls c
         JOIN bots b ON c.bot_id = b.id
-        WHERE c.site_id = $1 AND c.timestamp >= $2
+        WHERE c.site_id = $1 AND c.timestamp >= $2 ${browserFilter}
       ) combined
       GROUP BY bot_name
       ORDER BY requests DESC

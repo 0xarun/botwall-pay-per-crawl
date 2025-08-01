@@ -6,10 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs as UITabs, TabsList as UITabsList, TabsTrigger as UITabsTrigger, TabsContent as UITabsContent } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Globe, DollarSign, Activity, Settings, Trash2, Copy, ExternalLink, BarChart3, CreditCard, TrendingUp, Users, Bot } from 'lucide-react';
+import { Pagination } from '@/components/ui/pagination';
+import { BrowserFilter } from '@/components/ui/browser-filter';
+import { Plus, Globe, DollarSign, Activity, Settings, Trash2, Copy, ExternalLink, BarChart3, CreditCard, TrendingUp, Users, Bot, Shield } from 'lucide-react';
 import { CreateSiteForm } from '@/components/forms/CreateSiteForm';
 import { SiteCredentials } from '@/components/SiteCredentials';
 import { PaymentAnalytics } from '@/components/PaymentAnalytics';
+import { MiddlewareStatus } from '@/components/MiddlewareStatus';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
 import { useQueryClient } from '@tanstack/react-query';
@@ -20,7 +23,18 @@ import { cn } from '@/lib/utils';
 export default function SiteOwnerDashboard() {
   const { user, signOut } = useAuth();
   const { sites, isLoading: isLoadingSites, createSite, deleteSite } = useSites();
-  const { siteOwnerCrawls, isLoadingSiteCrawls } = useCrawls();
+  
+  // Pagination and filtering state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [excludeBrowsers, setExcludeBrowsers] = useState(true);
+  const itemsPerPage = 20;
+  
+  const { 
+    siteOwnerCrawls, 
+    siteOwnerPagination,
+    isLoadingSiteCrawls 
+  } = useCrawls(currentPage, itemsPerPage, excludeBrowsers);
+  
   const { siteOwnerStats, isLoadingSiteStats } = useCrawlStats();
   const { data: knownBots = [], isLoading: isLoadingKnownBots } = useKnownBots();
   const { toast } = useToast();
@@ -113,6 +127,11 @@ export default function SiteOwnerDashboard() {
       badge: sites?.length?.toString() || '0'
     },
     {
+      title: 'Middleware',
+      href: 'middleware',
+      icon: Shield
+    },
+    {
       title: 'Analytics',
       href: 'analytics',
       icon: BarChart3,
@@ -145,41 +164,62 @@ export default function SiteOwnerDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Crawl Requests</CardTitle>
-          <CardDescription>
-            Track all bot activities and their success rates
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recent Crawl Requests</CardTitle>
+              <CardDescription>
+                Track all bot activities and their success rates
+              </CardDescription>
+            </div>
+            <BrowserFilter
+              excludeBrowsers={excludeBrowsers}
+              onToggle={setExcludeBrowsers}
+            />
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {isLoadingSiteCrawls ? (
             <div className="text-center py-8">Loading activities...</div>
           ) : siteOwnerCrawls && siteOwnerCrawls.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Bot</TableHead>
-                  <TableHead>Site</TableHead>
-                  <TableHead>Path</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Time</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {siteOwnerCrawls.slice(0, 10).map((crawl) => (
-                  <TableRow key={crawl.id}>
-                    <TableCell className="font-medium">{crawl.bot_name || 'Unknown Bot'}</TableCell>
-                    <TableCell>{crawl.site_name || 'Unknown Site'}</TableCell>
-                    <TableCell className="font-mono text-xs">{crawl.path}</TableCell>
-                    <TableCell>
-                      <Badge variant={crawl.status === 'success' ? "default" : "destructive"}>
-                        {crawl.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatDistanceToNow(new Date(crawl.timestamp), { addSuffix: true })}</TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Bot</TableHead>
+                    <TableHead>Site</TableHead>
+                    <TableHead>Path</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Time</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {siteOwnerCrawls.map((crawl) => (
+                    <TableRow key={crawl.id}>
+                      <TableCell className="font-medium">{crawl.bot_name || 'Unknown Bot'}</TableCell>
+                      <TableCell>{crawl.site_name || 'Unknown Site'}</TableCell>
+                      <TableCell className="font-mono text-xs">{crawl.path}</TableCell>
+                      <TableCell>
+                        <Badge variant={crawl.status === 'success' ? "default" : "destructive"}>
+                          {crawl.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{formatDistanceToNow(new Date(crawl.timestamp), { addSuffix: true })}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {siteOwnerPagination && (
+                <Pagination
+                  currentPage={siteOwnerPagination.page}
+                  totalPages={siteOwnerPagination.totalPages}
+                  totalItems={siteOwnerPagination.total}
+                  itemsPerPage={siteOwnerPagination.limit}
+                  onPageChange={setCurrentPage}
+                  className="mt-6"
+                />
+              )}
+            </>
           ) : (
             <div className="text-center py-8">
               <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -187,11 +227,11 @@ export default function SiteOwnerDashboard() {
               <p className="text-muted-foreground">
                 Bot activities will appear here once bots start crawling your sites
               </p>
-          </div>
+            </div>
           )}
         </CardContent>
       </Card>
-          </div>
+    </div>
   );
 
   const renderSitesSection = () => (
@@ -507,7 +547,7 @@ export default function SiteOwnerDashboard() {
                   }, {} as Record<string, number>);
                   
                   const topBots = Object.entries(botCounts)
-                    .sort(([,a], [,b]) => b - a)
+                    .sort(([,a], [,b]) => (b as number) - (a as number))
                     .slice(0, 5);
                   
                   return topBots.map(([botName, count]) => (
@@ -525,7 +565,7 @@ export default function SiteOwnerDashboard() {
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-primary">{count}</div>
+                        <div className="font-semibold text-primary">{count as number}</div>
                         <div className="text-sm text-muted-foreground">requests</div>
                       </div>
                     </div>
@@ -803,10 +843,44 @@ export default function SiteOwnerDashboard() {
     </div>
   );
 
+  const renderMiddlewareSection = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold">Middleware Status</h2>
+        <p className="text-muted-foreground">Monitor and verify your Botwall middleware installation</p>
+      </div>
+
+      {sites && sites.length > 0 ? (
+        <div className="space-y-6">
+          {sites.map((site) => (
+            <MiddlewareStatus
+              key={site.id}
+              siteId={site.id}
+              siteDomain={site.domain}
+            />
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="text-center py-8">
+            <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No sites configured</h3>
+            <p className="text-muted-foreground mb-4">
+              Create a site first to monitor middleware status
+            </p>
+            <CreateSiteForm />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeSection) {
       case 'sites':
         return renderSitesSection();
+      case 'middleware':
+        return renderMiddlewareSection();
       case 'activities':
         return renderActivitiesSection();
       case 'analytics':

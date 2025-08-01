@@ -7,6 +7,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import { config, validateConfig } from './config';
 import './models/db';
 import authRoutes from './routes/auth';
 import botRoutes from './routes/bots';
@@ -17,16 +18,17 @@ import verifyRoutes from './routes/verify';
 import { Router } from 'express';
 import botAnalyticsRoutes from './routes/botAnalytics';
 
-// Load environment variables
+// Validate configuration before starting
+validateConfig();
+
 const app = express();
-const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet());
-// CORS: Use FRONTEND_URL from environment, fallback to localhost for dev
+// CORS: Use centralized config
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: config.cors.origin,
+  credentials: config.cors.credentials
 }));
 app.use(morgan('combined'));
 app.use(express.json());
@@ -34,7 +36,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    environment: config.server.nodeEnv,
+    version: process.env.npm_package_version || '1.0.0'
+  });
 });
 
 // API routes
@@ -70,7 +77,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   console.error(err.stack);
   res.status(500).json({ 
     error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    message: config.server.isDevelopment ? err.message : 'Something went wrong'
   });
 });
 
@@ -80,10 +87,11 @@ async function startServer() {
     // No explicit database initialization needed
     console.log('✅ Database pool created successfully');
     
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/health`);
-      console.log(`🔗 API base URL: http://localhost:${PORT}/api`);
+    app.listen(config.server.port, () => {
+      console.log(`🚀 Server running on port ${config.server.port}`);
+      console.log(`📊 Health check: http://localhost:${config.server.port}/health`);
+      console.log(`🔗 API base URL: http://localhost:${config.server.port}/api`);
+      console.log(`🌍 Environment: ${config.server.nodeEnv}`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

@@ -24,20 +24,28 @@ export interface CrawlStats {
   totalEarnings?: number;
 }
 
-export function useCrawls() {
+export function useCrawls(page: number = 1, limit: number = 20, excludeBrowsers: boolean = true) {
   const { user, profile } = useAuth();
 
   // Fetch crawls for site owners (crawls on their sites)
   const {
-    data: siteOwnerCrawls = [],
+    data: siteOwnerCrawlsData,
     isLoading: isLoadingSiteCrawls,
     error: siteCrawlsError
   } = useQuery({
-    queryKey: ['crawls', 'site-owner', user?.id],
-    queryFn: async (): Promise<Crawl[]> => {
-      if (!user || profile?.role !== 'site_owner') return [];
+    queryKey: ['crawls', 'site-owner', user?.id, page, limit, excludeBrowsers],
+    queryFn: async () => {
+      if (!user || profile?.role !== 'site_owner') {
+        return { crawls: [], pagination: null, filters: null };
+      }
 
-      const response = await fetch(`${API_BASE_URL}/crawls/site-owner`, {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        excludeBrowsers: excludeBrowsers.toString()
+      });
+
+      const response = await fetch(`${API_BASE_URL}/crawls/site-owner?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -48,22 +56,30 @@ export function useCrawls() {
       }
 
       const data = await response.json();
-      return Array.isArray(data) ? data : data.crawls || [];
+      return data;
     },
     enabled: !!user && profile?.role === 'site_owner'
   });
 
   // Fetch crawls for bot developers (crawls from their bots)
   const {
-    data: botDeveloperCrawls = [],
+    data: botDeveloperCrawlsData,
     isLoading: isLoadingBotCrawls,
     error: botCrawlsError
   } = useQuery({
-    queryKey: ['crawls', 'bot-developer', user?.id],
-    queryFn: async (): Promise<Crawl[]> => {
-      if (!user || profile?.role !== 'bot_developer') return [];
+    queryKey: ['crawls', 'bot-developer', user?.id, page, limit, excludeBrowsers],
+    queryFn: async () => {
+      if (!user || profile?.role !== 'bot_developer') {
+        return { crawls: [], pagination: null, filters: null };
+      }
 
-      const response = await fetch(`${API_BASE_URL}/crawls/bot-developer`, {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+        excludeBrowsers: excludeBrowsers.toString()
+      });
+
+      const response = await fetch(`${API_BASE_URL}/crawls/bot-developer?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -74,14 +90,18 @@ export function useCrawls() {
       }
 
       const data = await response.json();
-      return Array.isArray(data) ? data : data.crawls || [];
+      return data;
     },
     enabled: !!user && profile?.role === 'bot_developer'
   });
 
   return {
-    siteOwnerCrawls,
-    botDeveloperCrawls,
+    siteOwnerCrawls: siteOwnerCrawlsData?.crawls || [],
+    siteOwnerPagination: siteOwnerCrawlsData?.pagination,
+    siteOwnerFilters: siteOwnerCrawlsData?.filters,
+    botDeveloperCrawls: botDeveloperCrawlsData?.crawls || [],
+    botDeveloperPagination: botDeveloperCrawlsData?.pagination,
+    botDeveloperFilters: botDeveloperCrawlsData?.filters,
     isLoadingSiteCrawls,
     isLoadingBotCrawls,
     siteCrawlsError,

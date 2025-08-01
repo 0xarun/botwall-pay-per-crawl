@@ -1,11 +1,26 @@
 import { Pool } from 'pg';
 
-// Use environment variable for connection string
-const pool = new Pool({
-  connectionString: process.env.SUPABASE_DB_URL,
-  ssl: { rejectUnauthorized: false }
-});
+// Database configuration with environment-aware settings
+const getDatabaseConfig = () => {
+  const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
+  
+  if (!connectionString) {
+    throw new Error('DATABASE_URL or SUPABASE_DB_URL environment variable is required');
+  }
 
+  const config: any = {
+    connectionString,
+  };
+
+  // SSL configuration - required for production databases
+  if (process.env.NODE_ENV === 'production' || connectionString.includes('supabase')) {
+    config.ssl = { rejectUnauthorized: false };
+  }
+
+  return config;
+};
+
+const pool = new Pool(getDatabaseConfig());
 
 // Query helper for multiple rows
 export async function query(sql: string, params: any[] = []): Promise<any[]> {
