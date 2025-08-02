@@ -169,7 +169,7 @@ router.get('/sites/domain/:domain', async (req: Request, res: Response) => {
   try {
     const { domain } = req.params;
     const site = await queryOne(
-      'SELECT id, name, domain, price_per_crawl FROM sites WHERE domain = $1',
+      'SELECT id, name, site_id, frontend_domain, backend_domain, price_per_crawl FROM sites WHERE frontend_domain = $1 OR backend_domain = $1',
       [domain]
     );
     if (!site) {
@@ -178,7 +178,9 @@ router.get('/sites/domain/:domain', async (req: Request, res: Response) => {
     res.json({ 
       site_id: site.id, 
       name: site.name, 
-      domain: site.domain,
+      site_id_string: site.site_id,
+      frontend_domain: site.frontend_domain,
+      backend_domain: site.backend_domain,
       price_per_crawl: site.price_per_crawl
     });
   } catch (error) {

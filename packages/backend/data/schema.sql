@@ -15,8 +15,8 @@ CREATE TABLE public.bot_crawl_logs (
   raw_headers jsonb,
   extra jsonb,
   CONSTRAINT bot_crawl_logs_pkey PRIMARY KEY (id),
-  CONSTRAINT bot_crawl_logs_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
   CONSTRAINT bot_crawl_logs_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
+  CONSTRAINT bot_crawl_logs_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
   CONSTRAINT bot_crawl_logs_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id)
 );
 CREATE TABLE public.bots (
@@ -30,10 +30,10 @@ CREATE TABLE public.bots (
   public_key text,
   private_key text,
   generated_at timestamp with time zone,
-  total_requests integer NOT NULL DEFAULT 0,
-  successful_requests integer NOT NULL DEFAULT 0,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
+  total_requests integer NOT NULL DEFAULT 0,
+  successful_requests integer NOT NULL DEFAULT 0,
   CONSTRAINT bots_pkey PRIMARY KEY (id),
   CONSTRAINT bots_developer_id_fkey FOREIGN KEY (developer_id) REFERENCES public.users(id)
 );
@@ -62,7 +62,7 @@ CREATE TABLE public.known_bots (
 );
 CREATE TABLE public.middleware_verification (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
-  site_id uuid NOT NULL,
+  site_id uuid NOT NULL UNIQUE,
   status text NOT NULL CHECK (status = ANY (ARRAY['installed'::text, 'not_installed'::text, 'error'::text, 'unknown'::text])),
   last_check timestamp with time zone DEFAULT now(),
   last_successful_check timestamp with time zone,
@@ -72,8 +72,7 @@ CREATE TABLE public.middleware_verification (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT middleware_verification_pkey PRIMARY KEY (id),
-  CONSTRAINT middleware_verification_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
-  CONSTRAINT middleware_verification_site_id_unique UNIQUE (site_id)
+  CONSTRAINT middleware_verification_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -103,11 +102,16 @@ CREATE TABLE public.sites (
   name text NOT NULL,
   domain text NOT NULL,
   price_per_crawl numeric NOT NULL DEFAULT 0.01,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
   total_earnings numeric NOT NULL DEFAULT 0,
   total_requests integer NOT NULL DEFAULT 0,
   successful_requests integer NOT NULL DEFAULT 0,
-  created_at timestamp with time zone DEFAULT now(),
-  updated_at timestamp with time zone DEFAULT now(),
+  site_id text UNIQUE,
+  frontend_domain text,
+  backend_domain text,
+  monetized_routes jsonb DEFAULT '["/*"]'::jsonb,
+  analytics_routes jsonb DEFAULT '["/*"]'::jsonb,
   CONSTRAINT sites_pkey PRIMARY KEY (id),
   CONSTRAINT sites_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.users(id)
 );
