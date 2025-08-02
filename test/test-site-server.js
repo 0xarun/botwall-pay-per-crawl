@@ -17,6 +17,5 @@ app.get('/api/protected', validateCrawlRequest({
 
 app.listen(3002, () => {
   console.log('Test Site Owner API running on http://localhost:3002');
-  console.log('Backend URL: http://localhost:3001');
   console.log('✅ Ready to test signed bots and known bots!');
 });

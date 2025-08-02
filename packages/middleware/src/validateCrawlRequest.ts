@@ -37,6 +37,11 @@ async function getKnownBots(backendUrl: string) {
 // --- Site bot preferences cache (per site) ---
 const siteBotPrefsCache: Record<string, { prefs: any[]; ts: number }> = {};
 const SITE_PREFS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// --- Unknown bot preferences cache (per site) ---
+const siteUnknownBotPrefsCache: Record<string, { prefs: any[]; ts: number }> = {};
+const SITE_UNKNOWN_PREFS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 async function getSiteBotPrefs(backendUrl: string, siteId: string) {
   const now = Date.now();
   if (siteBotPrefsCache[siteId] && now - siteBotPrefsCache[siteId].ts < SITE_PREFS_CACHE_TTL) {
@@ -54,6 +59,37 @@ async function getSiteBotPrefs(backendUrl: string, siteId: string) {
     return [];
   }
   return [];
+}
+
+async function getSiteUnknownBotPrefs(backendUrl: string, siteId: string) {
+  const now = Date.now();
+  if (siteUnknownBotPrefsCache[siteId] && now - siteUnknownBotPrefsCache[siteId].ts < SITE_UNKNOWN_PREFS_CACHE_TTL) {
+    return siteUnknownBotPrefsCache[siteId].prefs;
+  }
+  try {
+    const res = await fetch(`${backendUrl}/api/sites/${siteId}/unknown-bot-prefs`);
+    if (res.ok) {
+      const prefs = await res.json();
+      siteUnknownBotPrefsCache[siteId] = { prefs, ts: now };
+      return prefs;
+    }
+  } catch (err) {
+    if (siteUnknownBotPrefsCache[siteId]) return siteUnknownBotPrefsCache[siteId].prefs;
+    return [];
+  }
+  return [];
+}
+
+async function discoverUnknownBot(backendUrl: string, userAgent: string, botName: string) {
+  try {
+    await fetch(`${backendUrl}/api/unknown-bot-discovery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_agent: userAgent, bot_name: botName })
+    });
+  } catch (err) {
+    console.log(`❌ Middleware: Failed to discover unknown bot:`, err);
+  }
 }
 
 // --- Site lookup cache (per domain) ---
@@ -187,7 +223,7 @@ function classifyBot(headers: Record<string, string>, userAgent: string, knownBo
 }
 
 export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
-  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'http://localhost:3001';
+  const backendUrl = options?.backendUrl || process.env.BACKEND_URL || 'https://botwall-api.onrender.com';
   const configSiteId = options?.siteId;
   const configMonetizedRoutes = options?.monetizedRoutes || ['/*'];
   const configPricePerCrawl = options?.pricePerCrawl || 0.01;
@@ -390,16 +426,50 @@ Bots must pay to access this content. Check BotWall.`);
       }
     }
 
-    // Log and allow the request
+    // Handle unknown bots - BLOCK BY DEFAULT
+    if (type === 'unknown') {
+      console.log(`🔍 Middleware: Unknown bot detected: ${userAgent}`);
+      
+      // Discover/register the unknown bot
+      await discoverUnknownBot(backendUrl, userAgent, getBotName(userAgent));
+      
+      // Check site-specific preferences for this unknown bot
+      const unknownBotPrefs = await getSiteUnknownBotPrefs(backendUrl, siteId);
+      const unknownBotPref = unknownBotPrefs.find((p: any) => p.user_agent === userAgent);
+      
+      // Default to blocked unless explicitly allowed
+      const shouldBlock = !unknownBotPref || unknownBotPref.blocked;
+      
+      if (shouldBlock) {
+        console.log(`🚫 Middleware: Blocking unknown bot for site ${siteId}: ${userAgent}`);
+        await logBotCrawl({
+          backendUrl, siteId, userAgent, botName: getBotName(userAgent), path, status: 'blocked', ip, headers
+        });
+        return res.status(403).send(`🚫 Access Denied - BotWall Protection Active
+
+This content is protected by BotWall's pay-per-crawl system.
+
+Unauthorized bots are not allowed to scrape this content.
+To access this content, you need to:
+1. Register your bot at https://botwall.com
+2. Purchase credits for crawling
+3. Use proper authentication headers
+
+For more information, visit: https://botwall.com`);
+      } else {
+        console.log(`✅ Middleware: Unknown bot allowed by site preference for site ${siteId}: ${userAgent}`);
+        await logBotCrawl({
+          backendUrl, siteId, userAgent, botName: getBotName(userAgent), path, status: 'success', ip, headers
+        });
+        return next();
+      }
+    }
+
+    // Log and allow known bots
     if (type === 'known' && knownBot) {
       console.log(`✅ Middleware: Known bot ${knownBot.name} allowed for site ${siteId}`);
       await logBotCrawl({
         backendUrl, siteId, userAgent, botName: knownBot.name, path, status: 'success', ip, knownBotId: knownBot.id, headers
-      });
-    } else {
-      console.log(`✅ Middleware: Unknown bot allowed for site ${siteId}`);
-      await logBotCrawl({
-        backendUrl, siteId, userAgent, botName: userAgent || 'Unknown', path, status: 'success', ip, headers
       });
     }
     

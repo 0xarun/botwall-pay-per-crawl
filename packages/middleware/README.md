@@ -1,50 +1,142 @@
 # BotWall Middleware
 
-Express middleware for protecting your API routes with pay-per-crawl, signature verification, bot analytics, and intelligent bot management.
+Express middleware for protecting your API routes with pay-per-crawl, signature verification, and bot analytics.
 
 ## Installation
+
 ```bash
 npm install @botwall/middleware
 ```
 
-## Usage
-```js
+## Quick Start
+
+```javascript
+const express = require('express');
 const { validateCrawlRequest } = require('@botwall/middleware');
 
-app.use('/article', validateCrawlRequest());
+const app = express();
+
+// Basic protection
+app.use('/api', validateCrawlRequest({
+  siteId: 'your-site-id'
+}));
+
+// Advanced configuration
+app.use('/api', validateCrawlRequest({
+  siteId: 'your-site-id',
+  backendUrl: 'https://botwall-api.onrender.com',
+  monetizedRoutes: ['/api/protected/*'],
+  pricePerCrawl: 0.01
+}));
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
 ```
-
-- No credentials or secrets needed. The middleware:
-  - Detects bots via headers/signatures and user-agent patterns
-  - Enforces pricing per path (via backend API)
-  - Verifies Ed25519 signatures for signed bots
-  - Provides comprehensive bot analytics and logging
-  - Supports site-specific bot allow/block preferences
-  - Handles known bots (search engines, LLMs) and unknown bots
-  - Calls the backend to deduct credits and log crawls
-
-## Configuration
-- `backendUrl` (optional): The base URL of your backend API. If not provided, the middleware will use `process.env.BACKEND_URL` or a default value.
-- No database or .env setup is required for the middleware package itself.
 
 ## Features
 
-### Bot Detection & Management
-- **Signed Bots**: Verifies Ed25519 signatures for authenticated crawlers
-- **Known Bots**: Detects search engines, LLMs, and other known bots via user-agent patterns
-- **Unknown Bots**: Handles unidentified bots with analytics tracking
-- **Site-Specific Rules**: Supports per-site bot allow/block preferences
+- 🔒 **Bot Detection** - Automatically detects bots via user-agent patterns
+- 💳 **Pay-per-Crawl** - Charge bots for accessing protected routes
+- 🔐 **Signature Verification** - Verify Ed25519 signatures for authenticated bots
+- 📊 **Analytics** - Track bot activity and send data to BotWall backend
+- 🛡️ **Route Protection** - Protect specific routes from unauthorized access
+- 🚀 **Easy Setup** - Simple middleware configuration
 
-### Analytics & Logging
-- Comprehensive bot crawl logging with IP addresses, user agents, and request details
-- Real-time analytics for bot traffic patterns
-- Performance-optimized caching for bot lists and site preferences
+## Configuration
 
-## API
-- `validateCrawlRequest(options)` — Express middleware for comprehensive bot protection
-  - `options.backendUrl` (optional): Backend API base URL for pricing, public key lookups, and analytics.
+### Options
 
----
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `siteId` | string | **required** | Your BotWall site ID |
+| `backendUrl` | string | `https://botwall-api.onrender.com` | BotWall backend URL |
+| `monetizedRoutes` | string[] | `['/api/protected/*']` | Routes that require payment |
+| `pricePerCrawl` | number | `0.01` | Price per crawl in USD |
 
-## 👤 Maintainer
-- Arun — [x.com/0xarun](https://x.com/0xarun) | [linkedin.com/in/0xarun](https://linkedin.com/in/0xarun) 
+### Example Configurations
+
+#### Basic Protection
+```javascript
+app.use('/api', validateCrawlRequest({
+  siteId: 'abc123'
+}));
+```
+
+#### Custom Routes
+```javascript
+app.use('/api', validateCrawlRequest({
+  siteId: 'abc123',
+  monetizedRoutes: ['/api/data/*', '/api/premium/*']
+}));
+```
+
+#### Custom Backend
+```javascript
+app.use('/api', validateCrawlRequest({
+  siteId: 'abc123',
+  backendUrl: 'https://your-backend.com'
+}));
+```
+
+## How It Works
+
+1. **Request Arrives** - Middleware intercepts incoming requests
+2. **Bot Detection** - Checks user-agent for bot patterns
+3. **Browser Check** - Allows legitimate browsers immediately
+4. **Route Check** - Determines if route is monetized
+5. **Protection Applied** - Blocks bots or requires payment
+6. **Analytics Logged** - Sends data to BotWall backend
+
+## Bot Types
+
+### Browsers
+- ✅ **Always Allowed** - No restrictions
+- ✅ **Analytics Logged** - For monitoring purposes
+
+### Known Bots (Google, Bing, etc.)
+- ✅ **Configurable** - Allow/block per site preferences
+- ✅ **Analytics Logged** - Track activity
+
+### Signed Bots (Your Bots)
+- ✅ **Signature Verified** - Ed25519 verification
+- ✅ **Credits Checked** - Must have sufficient credits
+- ✅ **Payment Required** - Deducts credits per request
+
+### Unknown Bots
+- ❌ **Blocked** - On monetized routes
+- ✅ **Analytics Logged** - Track activity
+
+## Testing
+
+### Test Browser Access
+```bash
+curl -H "User-Agent: Mozilla/5.0" http://localhost:3000/api/public
+# Should work ✅
+```
+
+### Test Bot Access
+```bash
+curl -H "User-Agent: GPTBot" http://localhost:3000/api/protected
+# Should be blocked ❌
+```
+
+### Test Signed Bot
+```bash
+curl -H "User-Agent: CustomBot" \
+     -H "crawler-id: your-bot-id" \
+     -H "signature-input: crawler-id" \
+     -H "signature: your-signature" \
+     http://localhost:3000/api/protected
+# Should work with credits ✅
+```
+
+## Support
+
+- **Documentation**: [https://botwall.com/docs](https://botwall.com/docs)
+- **Issues**: [GitHub Issues](https://github.com/botwall/botwall-pay-per-crawl/issues)
+- **Email**: support@botwall.com
+
+## License
+
+MIT License - see [LICENSE](../../LICENSE) for details. 

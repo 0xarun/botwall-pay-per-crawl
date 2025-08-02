@@ -14,10 +14,11 @@ CREATE TABLE public.bot_crawl_logs (
   timestamp timestamp with time zone DEFAULT now(),
   raw_headers jsonb,
   extra jsonb,
+  bot_classification text DEFAULT 'known'::text CHECK (bot_classification = ANY (ARRAY['known'::text, 'unknown'::text, 'suspicious'::text])),
   CONSTRAINT bot_crawl_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT bot_crawl_logs_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id),
   CONSTRAINT bot_crawl_logs_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
-  CONSTRAINT bot_crawl_logs_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
-  CONSTRAINT bot_crawl_logs_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id)
+  CONSTRAINT bot_crawl_logs_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
 );
 CREATE TABLE public.bots (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -46,8 +47,8 @@ CREATE TABLE public.crawls (
   user_agent text,
   timestamp timestamp with time zone DEFAULT now(),
   CONSTRAINT crawls_pkey PRIMARY KEY (id),
-  CONSTRAINT crawls_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id),
-  CONSTRAINT crawls_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+  CONSTRAINT crawls_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT crawls_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id)
 );
 CREATE TABLE public.known_bots (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -93,8 +94,19 @@ CREATE TABLE public.site_bot_preferences (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT site_bot_preferences_pkey PRIMARY KEY (id),
-  CONSTRAINT site_bot_preferences_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
-  CONSTRAINT site_bot_preferences_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id)
+  CONSTRAINT site_bot_preferences_known_bot_id_fkey FOREIGN KEY (known_bot_id) REFERENCES public.known_bots(id),
+  CONSTRAINT site_bot_preferences_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.site_unknown_bot_preferences (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL,
+  unknown_bot_id uuid NOT NULL,
+  blocked boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT site_unknown_bot_preferences_pkey PRIMARY KEY (id),
+  CONSTRAINT site_unknown_bot_preferences_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT site_unknown_bot_preferences_unknown_bot_id_fkey FOREIGN KEY (unknown_bot_id) REFERENCES public.unknown_bots(id)
 );
 CREATE TABLE public.sites (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -128,6 +140,18 @@ CREATE TABLE public.transactions (
   CONSTRAINT transactions_pkey PRIMARY KEY (id),
   CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT transactions_bot_id_fkey FOREIGN KEY (bot_id) REFERENCES public.bots(id)
+);
+CREATE TABLE public.unknown_bots (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_agent text NOT NULL,
+  bot_name text NOT NULL,
+  first_seen timestamp with time zone DEFAULT now(),
+  last_seen timestamp with time zone DEFAULT now(),
+  total_requests integer DEFAULT 0,
+  blocked_requests integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT unknown_bots_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.users (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

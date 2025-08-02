@@ -401,4 +401,371 @@ router.get('/analytics/timeline', async (req: Request, res: Response) => {
   }
 });
 
+// GET /analytics/path-details - Detailed path analytics with success rates and trends
+router.get('/analytics/path-details', async (req: Request, res: Response) => {
+  try {
+    const { site_id, days = 7, path } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+
+    let pathFilter = '';
+    let params = [site_id, daysAgo];
+    
+    if (path) {
+      pathFilter = 'AND path = $3';
+      params.push(path as string);
+    }
+
+    const pathDetails = await query(`
+      SELECT 
+        path,
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_requests,
+        ROUND(
+          (COUNT(CASE WHEN status = 'success' THEN 1 END)::float / COUNT(*)::float) * 100, 2
+        ) as success_rate,
+        COUNT(DISTINCT bot_name) as unique_bots,
+        MIN(timestamp) as first_seen,
+        MAX(timestamp) as last_seen
+      FROM (
+        SELECT path, status, bot_name, timestamp FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2 ${pathFilter}
+        UNION ALL
+        SELECT c.path, c.status, b.bot_name, c.timestamp FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2 ${pathFilter}
+      ) combined
+      GROUP BY path
+      ORDER BY total_requests DESC
+    `, params);
+
+    res.json(pathDetails);
+  } catch (error) {
+    console.error('Error fetching path details:', error);
+    res.status(500).json({ error: 'Failed to fetch path details' });
+  }
+});
+
+// GET /analytics/geographic - Geographic distribution of requests
+router.get('/analytics/geographic', async (req: Request, res: Response) => {
+  try {
+    const { site_id, days = 7 } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+
+    const geographic = await query(`
+      SELECT 
+        COALESCE(ip_address, 'Unknown') as country,
+        COUNT(*) as requests,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests,
+        COUNT(DISTINCT bot_name) as unique_bots
+      FROM (
+        SELECT ip_address, status, bot_name FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2
+        UNION ALL
+        SELECT NULL as ip_address, c.status, b.bot_name FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2
+      ) combined
+      GROUP BY ip_address
+      ORDER BY requests DESC
+    `, [site_id, daysAgo]);
+
+    res.json(geographic);
+  } catch (error) {
+    console.error('Error fetching geographic data:', error);
+    res.status(500).json({ error: 'Failed to fetch geographic data' });
+  }
+});
+
+// GET /analytics/performance - Performance metrics and response times
+router.get('/analytics/performance', async (req: Request, res: Response) => {
+  try {
+    const { site_id, days = 7 } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+
+    const performance = await query(`
+      SELECT 
+        DATE(timestamp) as date,
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests,
+        ROUND(
+          (COUNT(CASE WHEN status = 'success' THEN 1 END)::float / COUNT(*)::float) * 100, 2
+        ) as success_rate,
+        COUNT(DISTINCT bot_name) as unique_bots,
+        COUNT(DISTINCT path) as unique_paths
+      FROM (
+        SELECT timestamp, status, bot_name, path FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2
+        UNION ALL
+        SELECT c.timestamp, c.status, b.bot_name, c.path FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2
+      ) combined
+      GROUP BY DATE(timestamp)
+      ORDER BY date ASC
+    `, [site_id, daysAgo]);
+
+    res.json(performance);
+  } catch (error) {
+    console.error('Error fetching performance data:', error);
+    res.status(500).json({ error: 'Failed to fetch performance data' });
+  }
+});
+
+// GET /analytics/realtime - Real-time bot activity (last 24 hours)
+router.get('/analytics/realtime', async (req: Request, res: Response) => {
+  try {
+    const { site_id } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const last24Hours = new Date();
+    last24Hours.setHours(last24Hours.getHours() - 24);
+
+    const realtime = await query(`
+      SELECT 
+        DATE_TRUNC('hour', timestamp) as hour,
+        COUNT(*) as requests,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests,
+        COUNT(DISTINCT bot_name) as unique_bots,
+        COUNT(DISTINCT path) as unique_paths
+      FROM (
+        SELECT timestamp, status, bot_name, path FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2
+        UNION ALL
+        SELECT c.timestamp, c.status, b.bot_name, c.path FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2
+      ) combined
+      GROUP BY DATE_TRUNC('hour', timestamp)
+      ORDER BY hour ASC
+    `, [site_id, last24Hours]);
+
+    res.json(realtime);
+  } catch (error) {
+    console.error('Error fetching realtime data:', error);
+    res.status(500).json({ error: 'Failed to fetch realtime data' });
+  }
+});
+
+// GET /analytics/bot-details - Detailed bot analytics
+router.get('/analytics/bot-details', async (req: Request, res: Response) => {
+  try {
+    const { site_id, days = 7, bot_name } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+
+    let botFilter = '';
+    let params = [site_id, daysAgo];
+    
+    if (bot_name) {
+      botFilter = 'AND bot_name = $3';
+      params.push(bot_name as string);
+    }
+
+    const botDetails = await query(`
+      SELECT 
+        bot_name,
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN status = 'success' THEN 1 END) as successful_requests,
+        COUNT(CASE WHEN status = 'blocked' THEN 1 END) as blocked_requests,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_requests,
+        ROUND(
+          (COUNT(CASE WHEN status = 'success' THEN 1 END)::float / COUNT(*)::float) * 100, 2
+        ) as success_rate,
+        COUNT(DISTINCT path) as unique_paths,
+        MIN(timestamp) as first_seen,
+        MAX(timestamp) as last_seen,
+        AVG(EXTRACT(EPOCH FROM (MAX(timestamp) - MIN(timestamp)))) as avg_session_duration
+      FROM (
+        SELECT bot_name, status, path, timestamp FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2 ${botFilter}
+        UNION ALL
+        SELECT b.bot_name, c.status, c.path, c.timestamp FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2 ${botFilter}
+      ) combined
+      GROUP BY bot_name
+      ORDER BY total_requests DESC
+    `, params);
+
+    res.json(botDetails);
+  } catch (error) {
+    console.error('Error fetching bot details:', error);
+    res.status(500).json({ error: 'Failed to fetch bot details' });
+  }
+});
+
+// GET /analytics/trends - Trend analysis over time
+router.get('/analytics/trends', async (req: Request, res: Response) => {
+  try {
+    const { site_id, days = 30, metric = 'requests' } = req.query;
+    if (!site_id) {
+      return res.status(400).json({ error: 'site_id is required' });
+    }
+
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(days as string));
+
+    let metricColumn = 'COUNT(*)';
+    if (metric === 'success_rate') {
+      metricColumn = 'ROUND((COUNT(CASE WHEN status = \'success\' THEN 1 END)::float / COUNT(*)::float) * 100, 2)';
+    } else if (metric === 'unique_bots') {
+      metricColumn = 'COUNT(DISTINCT bot_name)';
+    } else if (metric === 'unique_paths') {
+      metricColumn = 'COUNT(DISTINCT path)';
+    }
+
+    const trends = await query(`
+      SELECT 
+        DATE(timestamp) as date,
+        ${metricColumn} as value
+      FROM (
+        SELECT timestamp, status, bot_name, path FROM bot_crawl_logs 
+        WHERE site_id = $1 AND timestamp >= $2
+        UNION ALL
+        SELECT c.timestamp, c.status, b.bot_name, c.path FROM crawls c
+        JOIN bots b ON c.bot_id = b.id
+        WHERE c.site_id = $1 AND c.timestamp >= $2
+      ) combined
+      GROUP BY DATE(timestamp)
+      ORDER BY date ASC
+    `, [site_id, daysAgo]);
+
+    res.json(trends);
+  } catch (error) {
+    console.error('Error fetching trends:', error);
+    res.status(500).json({ error: 'Failed to fetch trends' });
+  }
+});
+
+// GET /api/unknown-bots
+router.get('/unknown-bots', async (req: Request, res: Response) => {
+  try {
+    const bots = await query('SELECT * FROM unknown_bots ORDER BY last_seen DESC');
+    res.json(bots);
+  } catch (error) {
+    console.error('Error fetching unknown bots:', error);
+    res.status(500).json({ error: 'Failed to fetch unknown bots' });
+  }
+});
+
+// GET /sites/:id/unknown-bot-prefs
+router.get('/sites/:id/unknown-bot-prefs', async (req: Request, res: Response) => {
+  try {
+    const { id: site_id } = req.params;
+    const prefs = await query(
+      `SELECT p.*, ub.user_agent, ub.bot_name, ub.total_requests, ub.blocked_requests
+       FROM site_unknown_bot_preferences p
+       JOIN unknown_bots ub ON p.unknown_bot_id = ub.id
+       WHERE p.site_id = $1
+       ORDER BY ub.last_seen DESC`,
+      [site_id]
+    );
+    res.json(prefs);
+  } catch (error) {
+    console.error('Error fetching site unknown bot preferences:', error);
+    res.status(500).json({ error: 'Failed to fetch site unknown bot preferences' });
+  }
+});
+
+// POST /sites/:id/unknown-bot-prefs
+router.post('/sites/:id/unknown-bot-prefs', async (req: Request, res: Response) => {
+  try {
+    const { id: site_id } = req.params;
+    const { unknown_bot_id, blocked } = req.body;
+    if (!unknown_bot_id || typeof blocked !== 'boolean') {
+      return res.status(400).json({ error: 'unknown_bot_id and blocked(boolean) are required' });
+    }
+    
+    // Upsert preference
+    const existing = await queryOne(
+      'SELECT id FROM site_unknown_bot_preferences WHERE site_id = $1 AND unknown_bot_id = $2',
+      [site_id, unknown_bot_id]
+    );
+    
+    if (existing) {
+      await query(
+        'UPDATE site_unknown_bot_preferences SET blocked = $1, updated_at = now() WHERE id = $2',
+        [blocked, existing.id]
+      );
+    } else {
+      await query(
+        'INSERT INTO site_unknown_bot_preferences (site_id, unknown_bot_id, blocked, created_at, updated_at) VALUES ($1, $2, $3, now(), now())',
+        [site_id, unknown_bot_id, blocked]
+      );
+    }
+    res.json({ message: 'Unknown bot preference updated' });
+  } catch (error) {
+    console.error('Error updating site unknown bot preference:', error);
+    res.status(500).json({ error: 'Failed to update site unknown bot preference' });
+  }
+});
+
+// POST /api/unknown-bot-discovery - For middleware to register new unknown bots
+router.post('/unknown-bot-discovery', async (req: Request, res: Response) => {
+  try {
+    const { user_agent, bot_name } = req.body;
+    if (!user_agent || !bot_name) {
+      return res.status(400).json({ error: 'user_agent and bot_name are required' });
+    }
+
+    // Check if unknown bot already exists
+    let unknownBot = await queryOne(
+      'SELECT * FROM unknown_bots WHERE user_agent = $1',
+      [user_agent]
+    );
+
+    if (unknownBot) {
+      // Update existing unknown bot
+      await query(
+        `UPDATE unknown_bots 
+         SET last_seen = now(), 
+             total_requests = total_requests + 1,
+             updated_at = now()
+         WHERE id = $1`,
+        [unknownBot.id]
+      );
+    } else {
+      // Create new unknown bot
+      const id = uuidv4();
+      await query(
+        `INSERT INTO unknown_bots (id, user_agent, bot_name, first_seen, last_seen, total_requests, created_at, updated_at) 
+         VALUES ($1, $2, $3, now(), now(), 1, now(), now())`,
+        [id, user_agent, bot_name]
+      );
+      unknownBot = { id, user_agent, bot_name };
+    }
+
+    res.json({ message: 'Unknown bot recorded', bot: unknownBot });
+  } catch (error) {
+    console.error('Error recording unknown bot discovery:', error);
+    res.status(500).json({ error: 'Failed to record unknown bot discovery' });
+  }
+});
+
 export default router; 

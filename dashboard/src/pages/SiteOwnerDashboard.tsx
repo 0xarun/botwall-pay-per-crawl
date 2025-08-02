@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { useSites } from '@/hooks/useSites';
-import { useCrawls, useCrawlStats, useKnownBots, useSiteBotPreferences, useUpdateSiteBotPreference } from '@/hooks/useCrawls';
+import { useCrawls, useCrawlStats, useKnownBots, useSiteBotPreferences, useUpdateSiteBotPreference, useUnknownBots, useSiteUnknownBotPreferences, useUpdateSiteUnknownBotPreference } from '@/hooks/useCrawls';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,13 +37,19 @@ export default function SiteOwnerDashboard() {
   
   const { siteOwnerStats, isLoadingSiteStats } = useCrawlStats();
   const { data: knownBots = [], isLoading: isLoadingKnownBots } = useKnownBots();
+  const { data: unknownBots = [], isLoading: isLoadingUnknownBots } = useUnknownBots();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   // Get the first site for bot preferences (or you could add site selection)
   const currentSite = sites?.[0];
   const { data: siteBotPreferences = [], isLoading: isLoadingSiteBotPreferences } = useSiteBotPreferences(currentSite?.id || '');
+  const { data: siteUnknownBotPreferences = [], isLoading: isLoadingSiteUnknownBotPreferences } = useSiteUnknownBotPreferences(currentSite?.id || '');
   const updateSiteBotPreference = useUpdateSiteBotPreference(currentSite?.id || '');
+  const updateSiteUnknownBotPreference = useUpdateSiteUnknownBotPreference(currentSite?.id || '');
+
+  // Bot preferences tab state
+  const [activeBotTab, setActiveBotTab] = useState<'known' | 'unknown'>('known');
 
   // Combine known bots with site preferences
   const botsWithPreferences = knownBots.map(bot => {
@@ -51,6 +57,16 @@ export default function SiteOwnerDashboard() {
     return {
       ...bot,
       blocked: preference ? preference.blocked : bot.default_blocked || false,
+      preference_id: preference?.id
+    };
+  });
+
+  // Combine unknown bots with site preferences
+  const unknownBotsWithPreferences = unknownBots.map(bot => {
+    const preference = siteUnknownBotPreferences.find((pref: any) => pref.unknown_bot_id === bot.id);
+    return {
+      ...bot,
+      blocked: preference ? preference.blocked : true, // Default to blocked
       preference_id: preference?.id
     };
   });
@@ -789,90 +805,226 @@ export default function SiteOwnerDashboard() {
     </div>
   );
 
-  const renderBotPreferencesSection = () => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold">Bot Preferences</h2>
-        <p className="text-muted-foreground">Manage which bots can access your sites</p>
-      </div>
+  const handleToggleUnknownBotPreference = async (botId: string, blocked: boolean) => {
+    if (!currentSite?.id) {
+      toast({
+        title: 'No site selected',
+        description: 'Please create a site first to manage bot preferences.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Known Bots</CardTitle>
-          <CardDescription>
-            Configure access for known bots. Blocked bots appear at the top.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoadingKnownBots || isLoadingSiteBotPreferences ? (
-            <div className="text-center py-8">Loading bot preferences...</div>
-          ) : !currentSite ? (
-            <div className="text-center py-8">
-              <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No sites available</h3>
-              <p className="text-muted-foreground">
-                Create a site first to manage bot preferences
-              </p>
-            </div>
-          ) : botsWithPreferences && botsWithPreferences.length > 0 ? (
-            <div className="space-y-3">
-              {/* Sort bots: blocked first, then allowed */}
-              {botsWithPreferences
-                .sort((a, b) => {
-                  // Sort by blocked status first (blocked on top), then by name
-                  if (a.blocked !== b.blocked) {
-                    return a.blocked ? -1 : 1;
-                  }
-                                     return a.name.localeCompare(b.name);
-                })
-                .map((bot) => (
-                  <div 
-                    key={bot.id} 
-                    className={cn(
-                      "flex items-center justify-between p-4 border rounded-lg",
-                      bot.blocked 
-                        ? "border-destructive/20 bg-destructive/5" 
-                        : "border-success/20 bg-success/5"
-                    )}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Bot className={cn("h-5 w-5", bot.blocked ? "text-destructive" : "text-success")} />
-                      <div>
-                                                 <h4 className="font-medium">{bot.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {bot.description || 'No description available'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                      <Badge variant={bot.blocked ? "destructive" : "default"}>
-                        {bot.blocked ? "Blocked" : "Allowed"}
-                      </Badge>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleToggleBotPreference(bot.id, !bot.blocked)}
-                        disabled={isLoadingKnownBots || isLoadingSiteBotPreferences}
+    try {
+      await updateSiteUnknownBotPreference.mutateAsync({ unknown_bot_id: botId, blocked });
+      toast({
+        title: `Unknown bot ${blocked ? 'blocked' : 'allowed'}`,
+        description: `Unknown bot preference updated successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Failed to update unknown bot preference',
+        description: 'Could not update unknown bot preference. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const renderBotPreferencesSection = () => {
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold">Bot Preferences</h2>
+          <p className="text-muted-foreground">Manage which bots can access your sites</p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex space-x-1 bg-muted p-1 rounded-lg">
+          <button
+            onClick={() => setActiveBotTab('known')}
+            className={cn(
+              "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors",
+              activeBotTab === 'known'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Known Bots ({knownBots.length})
+          </button>
+          <button
+            onClick={() => setActiveBotTab('unknown')}
+            className={cn(
+              "flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors",
+              activeBotTab === 'unknown'
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Unknown Bots ({unknownBotsWithPreferences.length})
+          </button>
+        </div>
+
+        {/* Known Bots Tab */}
+        {activeBotTab === 'known' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Known Bots</CardTitle>
+              <CardDescription>
+                Configure access for known bots. Blocked bots appear at the top.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingKnownBots || isLoadingSiteBotPreferences ? (
+                <div className="text-center py-8">Loading known bot preferences...</div>
+              ) : !currentSite ? (
+                <div className="text-center py-8">
+                  <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No sites available</h3>
+                  <p className="text-muted-foreground">
+                    Create a site first to manage bot preferences
+                  </p>
+                </div>
+              ) : botsWithPreferences && botsWithPreferences.length > 0 ? (
+                <div className="space-y-3">
+                  {botsWithPreferences
+                    .sort((a, b) => {
+                      if (a.blocked !== b.blocked) {
+                        return a.blocked ? -1 : 1;
+                      }
+                      return a.name.localeCompare(b.name);
+                    })
+                    .map((bot) => (
+                      <div 
+                        key={bot.id} 
+                        className={cn(
+                          "flex items-center justify-between p-4 border rounded-lg",
+                          bot.blocked 
+                            ? "border-destructive/20 bg-destructive/5" 
+                            : "border-success/20 bg-success/5"
+                        )}
                       >
-                        {bot.blocked ? "Allow" : "Block"}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No known bots available</h3>
-              <p className="text-muted-foreground">
-                Known bots will appear here once they are configured
-              </p>
-            </div>
-                )}
-              </CardContent>
-            </Card>
-    </div>
-  );
+                        <div className="flex items-center space-x-3">
+                          <Bot className={cn("h-5 w-5", bot.blocked ? "text-destructive" : "text-success")} />
+                          <div>
+                            <h4 className="font-medium">{bot.name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {bot.description || 'No description available'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge variant={bot.blocked ? "destructive" : "default"}>
+                            {bot.blocked ? "Blocked" : "Allowed"}
+                          </Badge>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleToggleBotPreference(bot.id, !bot.blocked)}
+                            disabled={isLoadingKnownBots || isLoadingSiteBotPreferences}
+                          >
+                            {bot.blocked ? "Allow" : "Block"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No known bots available</h3>
+                  <p className="text-muted-foreground">
+                    Known bots will appear here once they are configured
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Unknown Bots Tab */}
+        {activeBotTab === 'unknown' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Unknown Bots</CardTitle>
+              <CardDescription>
+                Manage access for discovered unknown bots. All unknown bots are blocked by default.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingUnknownBots || isLoadingSiteUnknownBotPreferences ? (
+                <div className="text-center py-8">Loading unknown bot preferences...</div>
+              ) : !currentSite ? (
+                <div className="text-center py-8">
+                  <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No sites available</h3>
+                  <p className="text-muted-foreground">
+                    Create a site first to manage bot preferences
+                  </p>
+                </div>
+              ) : unknownBotsWithPreferences && unknownBotsWithPreferences.length > 0 ? (
+                <div className="space-y-3">
+                  {unknownBotsWithPreferences
+                    .sort((a, b) => {
+                      if (a.blocked !== b.blocked) {
+                        return a.blocked ? -1 : 1;
+                      }
+                      return new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime();
+                    })
+                    .map((bot) => (
+                      <div 
+                        key={bot.id} 
+                        className={cn(
+                          "flex items-center justify-between p-4 border rounded-lg",
+                          bot.blocked 
+                            ? "border-destructive/20 bg-destructive/5" 
+                            : "border-success/20 bg-success/5"
+                        )}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Bot className={cn("h-5 w-5", bot.blocked ? "text-destructive" : "text-success")} />
+                          <div>
+                            <h4 className="font-medium">{bot.bot_name}</h4>
+                            <p className="text-sm text-muted-foreground">
+                              {bot.user_agent}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Last seen: {new Date(bot.last_seen).toLocaleDateString()} • 
+                              Total requests: {bot.total_requests}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge variant={bot.blocked ? "destructive" : "default"}>
+                            {bot.blocked ? "Blocked" : "Allowed"}
+                          </Badge>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleToggleUnknownBotPreference(bot.id, !bot.blocked)}
+                            disabled={isLoadingUnknownBots || isLoadingSiteUnknownBotPreferences}
+                          >
+                            {bot.blocked ? "Allow" : "Block"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Bot className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No unknown bots discovered</h3>
+                  <p className="text-muted-foreground">
+                    Unknown bots will appear here once they attempt to access your site
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  };
 
   const renderPaymentsSection = () => (
     <div className="space-y-6">

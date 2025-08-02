@@ -278,3 +278,64 @@ export function useUpdateSiteBotPreference(siteId: string) {
     }
   });
 } 
+
+export function useUnknownBots() {
+  return useQuery({
+    queryKey: ['unknown-bots'],
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE_URL}/unknown-bots`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch unknown bots');
+      }
+      return await response.json();
+    }
+  });
+}
+
+export function useSiteUnknownBotPreferences(siteId: string) {
+  return useQuery({
+    queryKey: ['site-unknown-bot-prefs', siteId],
+    queryFn: async () => {
+      if (!siteId) return [];
+      const response = await fetch(`${API_BASE_URL}/sites/${siteId}/unknown-bot-prefs`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch unknown bot preferences');
+      }
+      return await response.json();
+    },
+    enabled: !!siteId
+  });
+}
+
+export function useUpdateSiteUnknownBotPreference(siteId: string) {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ unknown_bot_id, blocked }: { unknown_bot_id: string; blocked: boolean }) => {
+      const response = await fetch(`${API_BASE_URL}/sites/${siteId}/unknown-bot-prefs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ unknown_bot_id, blocked })
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update unknown bot preference');
+      }
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site-unknown-bot-prefs', siteId] });
+      queryClient.invalidateQueries({ queryKey: ['site-bot-prefs', siteId] });
+    }
+  });
+} 

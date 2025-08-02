@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/utils';
 
@@ -38,9 +39,67 @@ interface TimelineData {
   blocked_crawls: number;
 }
 
+interface PathDetails {
+  path: string;
+  total_requests: number;
+  successful_requests: number;
+  blocked_requests: number;
+  failed_requests: number;
+  success_rate: number;
+  unique_bots: number;
+  first_seen: string;
+  last_seen: string;
+}
+
+interface GeographicData {
+  country: string;
+  requests: number;
+  successful_requests: number;
+  blocked_requests: number;
+  unique_bots: number;
+}
+
+interface PerformanceData {
+  date: string;
+  total_requests: number;
+  successful_requests: number;
+  blocked_requests: number;
+  success_rate: number;
+  unique_bots: number;
+  unique_paths: number;
+}
+
+interface RealtimeData {
+  hour: string;
+  requests: number;
+  successful_requests: number;
+  blocked_requests: number;
+  unique_bots: number;
+  unique_paths: number;
+}
+
+interface BotDetails {
+  bot_name: string;
+  total_requests: number;
+  successful_requests: number;
+  blocked_requests: number;
+  failed_requests: number;
+  success_rate: number;
+  unique_paths: number;
+  first_seen: string;
+  last_seen: string;
+  avg_session_duration: number;
+}
+
+interface TrendData {
+  date: string;
+  value: number;
+}
+
 export default function Analytics() {
   const [selectedSite, setSelectedSite] = useState<string>('');
   const [timeRange, setTimeRange] = useState<number>(7);
+  const [selectedMetric, setSelectedMetric] = useState<string>('requests');
   const queryClient = useQueryClient();
 
   // Get user's sites
@@ -117,199 +176,301 @@ export default function Analytics() {
     enabled: !!selectedSite
   });
 
-  // Known bots
-  const { data: knownBots = [] } = useQuery({
-    queryKey: ['known-bots'],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE_URL}/known-bots`, {
+  // Path details
+  const { data: pathDetails } = useQuery({
+    queryKey: ['path-details', selectedSite, timeRange],
+    queryFn: async (): Promise<PathDetails[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/path-details?site_id=${selectedSite}&days=${timeRange}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      if (!response.ok) throw new Error('Failed to fetch known bots');
-      return response.json();
-    }
-  });
-
-  // Site bot preferences
-  const { data: botPrefs = [] } = useQuery({
-    queryKey: ['site-bot-prefs', selectedSite],
-    queryFn: async () => {
-      if (!selectedSite) return [];
-      const response = await fetch(`${API_BASE_URL}/sites/${selectedSite}/bot-prefs`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (!response.ok) throw new Error('Failed to fetch bot preferences');
+      if (!response.ok) throw new Error('Failed to fetch path details');
       return response.json();
     },
     enabled: !!selectedSite
   });
 
-  // Update bot preference mutation
-  const updateBotPref = useMutation({
-    mutationFn: async ({ known_bot_id, blocked }: { known_bot_id: string; blocked: boolean }) => {
-      const response = await fetch(`${API_BASE_URL}/sites/${selectedSite}/bot-prefs`, {
-        method: 'POST',
+  // Geographic data
+  const { data: geographicData } = useQuery({
+    queryKey: ['geographic', selectedSite, timeRange],
+    queryFn: async (): Promise<GeographicData[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/geographic?site_id=${selectedSite}&days=${timeRange}`, {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ known_bot_id, blocked })
+        }
       });
-      if (!response.ok) throw new Error('Failed to update bot preference');
+      if (!response.ok) throw new Error('Failed to fetch geographic data');
       return response.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['site-bot-prefs', selectedSite] });
-    }
+    enabled: !!selectedSite
+  });
+
+  // Performance data
+  const { data: performanceData } = useQuery({
+    queryKey: ['performance', selectedSite, timeRange],
+    queryFn: async (): Promise<PerformanceData[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/performance?site_id=${selectedSite}&days=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch performance data');
+      return response.json();
+    },
+    enabled: !!selectedSite
+  });
+
+  // Real-time data
+  const { data: realtimeData } = useQuery({
+    queryKey: ['realtime', selectedSite],
+    queryFn: async (): Promise<RealtimeData[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/realtime?site_id=${selectedSite}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch realtime data');
+      return response.json();
+    },
+    enabled: !!selectedSite,
+    refetchInterval: 30000 // Refresh every 30 seconds
+  });
+
+  // Bot details
+  const { data: botDetails } = useQuery({
+    queryKey: ['bot-details', selectedSite, timeRange],
+    queryFn: async (): Promise<BotDetails[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/bot-details?site_id=${selectedSite}&days=${timeRange}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch bot details');
+      return response.json();
+    },
+    enabled: !!selectedSite
+  });
+
+  // Trends data
+  const { data: trendsData } = useQuery({
+    queryKey: ['trends', selectedSite, timeRange, selectedMetric],
+    queryFn: async (): Promise<TrendData[]> => {
+      const response = await fetch(`${API_BASE_URL}/analytics/trends?site_id=${selectedSite}&days=${timeRange}&metric=${selectedMetric}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch trends data');
+      return response.json();
+    },
+    enabled: !!selectedSite
   });
 
   if (!sites || sites.length === 0) {
     return (
       <div className="container mx-auto p-6">
-        <h1 className="text-2xl font-bold mb-6">Analytics Dashboard</h1>
-        <p className="text-muted-foreground">No sites found. Create a site first to view analytics.</p>
+        <Card>
+          <CardContent className="p-6">
+            <p className="text-center text-muted-foreground">
+              No sites found. Please create a site first to view analytics.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
-          <p className="text-muted-foreground">Track bot activity and crawl performance</p>
-        </div>
-        
-        {/* Site Selector */}
-        <div className="flex gap-2">
-          <select 
-            value={selectedSite} 
-            onChange={(e) => setSelectedSite(e.target.value)}
-            className="px-3 py-2 border rounded-md"
-          >
-            <option value="">Select a site</option>
-            {sites.map((site: any) => (
-              <option key={site.id} value={site.id}>{site.name}</option>
-            ))}
-          </select>
-          
-          {/* Time Range Selector */}
-          <select 
-            value={timeRange} 
-            onChange={(e) => setTimeRange(Number(e.target.value))}
-            className="px-3 py-2 border rounded-md"
-          >
-            <option value={1}>24h</option>
-            <option value={7}>7d</option>
-            <option value={28}>28d</option>
-            <option value={90}>3mo</option>
-          </select>
-        </div>
-      </div>
+      {/* Site Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Analytics Dashboard</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4 items-center">
+            <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Select a site" />
+              </SelectTrigger>
+              <SelectContent>
+                {sites.map((site: any) => (
+                  <SelectItem key={site.id} value={site.id}>
+                    {site.name} ({site.domain})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={timeRange.toString()} onValueChange={(value) => setTimeRange(parseInt(value))}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1 Day</SelectItem>
+                <SelectItem value="7">7 Days</SelectItem>
+                <SelectItem value="30">30 Days</SelectItem>
+                <SelectItem value="90">90 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-      {!selectedSite ? (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Select a site to view analytics</p>
-        </div>
-      ) : (
+      {selectedSite && (
         <>
           {/* Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Crawls</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{overview?.totalCrawls || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  Last {timeRange} days
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{overview?.successRate?.toFixed(1) || 0}%</div>
-                <p className="text-xs text-muted-foreground">
-                  {overview?.successfulCrawls || 0} successful
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Blocked Crawls</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{overview?.blockedCrawls || 0}</div>
-                <p className="text-xs text-muted-foreground">
-                  Last {timeRange} days
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">${overview?.totalEarnings?.toFixed(2) || '0.00'}</div>
-                <p className="text-xs text-muted-foreground">
-                  From signed bots
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Timeline Chart */}
-          {timeline && timeline.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Crawl Activity Over Time</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-end justify-between gap-1">
-                  {timeline.map((day, index) => {
-                    const maxCrawls = Math.max(...timeline.map(d => d.total_crawls));
-                    const height = maxCrawls > 0 ? (day.total_crawls / maxCrawls) * 100 : 0;
-                    
-                    return (
-                      <div key={day.date} className="flex-1 flex flex-col items-center">
-                        <div 
-                          className="w-full bg-blue-500 rounded-t"
-                          style={{ height: `${height}%` }}
-                        />
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {new Date(day.date).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs font-medium">{day.total_crawls}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+          {overview && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Crawls</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{overview.totalCrawls.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{overview.successRate}%</div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Blocked Crawls</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{overview.blockedCrawls.toLocaleString()}</div>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Earnings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">${overview.totalEarnings.toFixed(2)}</div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
-          {/* Detailed Tables */}
-          <Tabs defaultValue="bots" className="space-y-4">
+          {/* Detailed Analytics Tabs */}
+          <Tabs defaultValue="overview" className="space-y-4">
             <TabsList>
-              <TabsTrigger value="bots">Popular Bots</TabsTrigger>
-              <TabsTrigger value="paths">Popular Paths</TabsTrigger>
-              <TabsTrigger value="preferences">Bot Preferences</TabsTrigger>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="paths">Path Analytics</TabsTrigger>
+              <TabsTrigger value="bots">Bot Analytics</TabsTrigger>
+              <TabsTrigger value="geographic">Geographic</TabsTrigger>
+              <TabsTrigger value="performance">Performance</TabsTrigger>
+              <TabsTrigger value="realtime">Real-time</TabsTrigger>
+              <TabsTrigger value="trends">Trends</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Popular Bots */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Popular Bots</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Bot</TableHead>
+                          <TableHead>Requests</TableHead>
+                          <TableHead>Success Rate</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {popularBots?.slice(0, 10).map((bot, index) => (
+                          <TableRow key={index}>
+                            <TableCell>{bot.bot_name}</TableCell>
+                            <TableCell>{bot.requests}</TableCell>
+                            <TableCell>
+                              {bot.requests > 0 ? Math.round((bot.successful_requests / bot.requests) * 100) : 0}%
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                {/* Popular Paths */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Popular Paths</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Path</TableHead>
+                          <TableHead>Visits</TableHead>
+                          <TableHead>Success Rate</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {popularPaths?.slice(0, 10).map((path, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-mono text-sm">{path.path}</TableCell>
+                            <TableCell>{path.visits}</TableCell>
+                            <TableCell>
+                              {path.visits > 0 ? Math.round((path.successful_visits / path.visits) * 100) : 0}%
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="paths" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Detailed Path Analytics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Path</TableHead>
+                        <TableHead>Total Requests</TableHead>
+                        <TableHead>Success Rate</TableHead>
+                        <TableHead>Unique Bots</TableHead>
+                        <TableHead>Last Seen</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pathDetails?.map((path, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="font-mono text-sm">{path.path}</TableCell>
+                          <TableCell>{path.total_requests}</TableCell>
+                          <TableCell>{path.success_rate}%</TableCell>
+                          <TableCell>{path.unique_bots}</TableCell>
+                          <TableCell>{new Date(path.last_seen).toLocaleDateString()}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="bots" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Top Bots by Activity</CardTitle>
+                  <CardTitle>Detailed Bot Analytics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
@@ -317,32 +478,19 @@ export default function Analytics() {
                       <TableRow>
                         <TableHead>Bot Name</TableHead>
                         <TableHead>Total Requests</TableHead>
-                        <TableHead>Successful</TableHead>
-                        <TableHead>Blocked</TableHead>
                         <TableHead>Success Rate</TableHead>
+                        <TableHead>Unique Paths</TableHead>
+                        <TableHead>Last Seen</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {popularBots?.map((bot) => (
-                        <TableRow key={bot.bot_name}>
-                          <TableCell className="font-medium">{bot.bot_name}</TableCell>
-                          <TableCell>{bot.requests}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-green-600">
-                              {bot.successful_requests}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-red-600">
-                              {bot.blocked_requests}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {bot.requests > 0 
-                              ? `${((bot.successful_requests / bot.requests) * 100).toFixed(1)}%`
-                              : '0%'
-                            }
-                          </TableCell>
+                      {botDetails?.map((bot, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{bot.bot_name}</TableCell>
+                          <TableCell>{bot.total_requests}</TableCell>
+                          <TableCell>{bot.success_rate}%</TableCell>
+                          <TableCell>{bot.unique_paths}</TableCell>
+                          <TableCell>{new Date(bot.last_seen).toLocaleDateString()}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -351,43 +499,30 @@ export default function Analytics() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="paths" className="space-y-4">
+            <TabsContent value="geographic" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Top Paths by Visits</CardTitle>
+                  <CardTitle>Geographic Distribution</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Path</TableHead>
-                        <TableHead>Total Visits</TableHead>
-                        <TableHead>Successful</TableHead>
-                        <TableHead>Blocked</TableHead>
+                        <TableHead>Country</TableHead>
+                        <TableHead>Requests</TableHead>
                         <TableHead>Success Rate</TableHead>
+                        <TableHead>Unique Bots</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {popularPaths?.map((path) => (
-                        <TableRow key={path.path}>
-                          <TableCell className="font-medium">{path.path}</TableCell>
-                          <TableCell>{path.visits}</TableCell>
+                      {geographicData?.map((geo, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{geo.country}</TableCell>
+                          <TableCell>{geo.requests}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-green-600">
-                              {path.successful_visits}
-                            </Badge>
+                            {geo.requests > 0 ? Math.round((geo.successful_requests / geo.requests) * 100) : 0}%
                           </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-red-600">
-                              {path.blocked_visits}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {path.visits > 0 
-                              ? `${((path.successful_visits / path.visits) * 100).toFixed(1)}%`
-                              : '0%'
-                            }
-                          </TableCell>
+                          <TableCell>{geo.unique_bots}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -396,51 +531,105 @@ export default function Analytics() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="preferences" className="space-y-4">
+            <TabsContent value="performance" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Bot Blocking Preferences</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Control which known bots are allowed or blocked for this site
-                  </p>
+                  <CardTitle>Performance Metrics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Bot Name</TableHead>
-                        <TableHead>User Agent Pattern</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Action</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Total Requests</TableHead>
+                        <TableHead>Success Rate</TableHead>
+                        <TableHead>Unique Bots</TableHead>
+                        <TableHead>Unique Paths</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {knownBots.map((bot: any) => {
-                        const pref = botPrefs.find((p: any) => p.known_bot_id === bot.id);
-                        const blocked = pref ? pref.blocked : false;
-                        return (
-                          <TableRow key={bot.id}>
-                            <TableCell className="font-medium">{bot.name}</TableCell>
-                            <TableCell className="font-mono text-xs max-w-[200px] truncate" title={bot.user_agent_pattern}>
-                              {bot.user_agent_pattern}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={blocked ? 'destructive' : 'default'}>
-                                {blocked ? 'Blocked' : 'Allowed'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Switch
-                                checked={!blocked}
-                                onCheckedChange={(checked) => {
-                                  updateBotPref.mutate({ known_bot_id: bot.id, blocked: !checked });
-                                }}
-                                disabled={updateBotPref.isPending}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {performanceData?.map((perf, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{new Date(perf.date).toLocaleDateString()}</TableCell>
+                          <TableCell>{perf.total_requests}</TableCell>
+                          <TableCell>{perf.success_rate}%</TableCell>
+                          <TableCell>{perf.unique_bots}</TableCell>
+                          <TableCell>{perf.unique_paths}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="realtime" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Real-time Activity (Last 24 Hours)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Hour</TableHead>
+                        <TableHead>Requests</TableHead>
+                        <TableHead>Success Rate</TableHead>
+                        <TableHead>Unique Bots</TableHead>
+                        <TableHead>Unique Paths</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {realtimeData?.map((realtime, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{new Date(realtime.hour).toLocaleTimeString()}</TableCell>
+                          <TableCell>{realtime.requests}</TableCell>
+                          <TableCell>
+                            {realtime.requests > 0 ? Math.round((realtime.successful_requests / realtime.requests) * 100) : 0}%
+                          </TableCell>
+                          <TableCell>{realtime.unique_bots}</TableCell>
+                          <TableCell>{realtime.unique_paths}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="trends" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    Trend Analysis
+                    <Select value={selectedMetric} onValueChange={setSelectedMetric}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="requests">Total Requests</SelectItem>
+                        <SelectItem value="success_rate">Success Rate</SelectItem>
+                        <SelectItem value="unique_bots">Unique Bots</SelectItem>
+                        <SelectItem value="unique_paths">Unique Paths</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Value</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trendsData?.map((trend, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{new Date(trend.date).toLocaleDateString()}</TableCell>
+                          <TableCell>{trend.value}</TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </CardContent>

@@ -1,0 +1,38 @@
+{
+  "name": "@botwall/frontend-protection",
+  "version": "1.0.0",
+  "description": "Frontend protection script for BotWall - protects your frontend from unwanted bots",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc && rollup -c",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "botwall",
+    "bot-protection",
+    "frontend",
+    "security",
+    "analytics"
+  ],
+  "author": "BotWall Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "rollup": "^3.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/botwall/botwall-pay-per-crawl.git"
+  }
+} 

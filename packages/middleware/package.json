@@ -1,44 +1,47 @@
 {
   "name": "@botwall/middleware",
-  "version": "1.2.3",
-  "description": "Express middleware for protecting your API routes with pay-per-crawl, signature verification, bot analytics, and intelligent bot management.",
+  "version": "1.2.5",
+  "description": "Express middleware for BotWall - protects your APIs with pay-per-crawl, signature verification, and bot analytics",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "botwall",
     "middleware",
     "express",
+    "bot-protection",
     "pay-per-crawl",
-    "signature",
-    "protection",
-    "analytics",
-    "bot-management",
-    "crawler-detection"
+    "signature-verification",
+    "analytics"
   ],
   "author": "BotWall Team",
   "license": "MIT",
   "dependencies": {
-    "@types/node": "^24.0.14",
-    "dotenv": "^17.2.0",
-    "node-fetch": "^2.7.0",
-    "pg": "^8.16.3",
-    "sqlite3": "^5.1.7",
-    "ts-node": "^10.9.2",
-    "tweetnacl": "^1.0.3",
-    "typescript": "^5.8.3"
+    "node-fetch": "^2.6.7"
   },
   "devDependencies": {
-    "@types/pg": "^8.15.4"
+    "@types/express": "^4.17.17",
+    "@types/node": "^18.15.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "express": "^4.0.0"
   },
   "files": [
-    "dist/**/*",
+    "dist",
     "README.md"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/0xarun/botwall-pay-per-crawl.git"
-  }
+    "url": "https://github.com/botwall/botwall-pay-per-crawl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/botwall/botwall-pay-per-crawl/issues"
+  },
+  "homepage": "https://botwall.com"
 }
