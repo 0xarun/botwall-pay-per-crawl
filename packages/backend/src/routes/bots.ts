@@ -231,6 +231,42 @@ router.get('/bot/:id/middleware-snippet', async (req: Request, res: Response) =>
   }
 });
 
+// --- PUBLIC: Check if a bot is registered (for middleware classification) ---
+router.post('/check-registered', async (req: Request, res: Response) => {
+  try {
+    const { user_agent } = req.body;
+    if (!user_agent) {
+      return res.status(400).json({ 
+        error: 'Missing user_agent', 
+        message: 'User agent is required' 
+      });
+    }
+    
+    // Check if this user agent matches any registered bot
+    const bot = await queryOne(
+      'SELECT bot_id, bot_name, public_key FROM bots WHERE bot_name ILIKE $1 OR $1 ILIKE CONCAT(\'%\', bot_name, \'%\')',
+      [user_agent]
+    );
+    
+    if (bot) {
+      res.json({ 
+        is_registered: true, 
+        bot_id: bot.bot_id, 
+        bot_name: bot.bot_name,
+        public_key: bot.public_key 
+      });
+    } else {
+      res.json({ is_registered: false });
+    }
+  } catch (error) {
+    console.error('Check registered bot error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: 'Failed to check bot registration status.' 
+    });
+  }
+});
+
 // --- PUBLIC: Get public key for a bot/crawler (for middleware verification) ---
 router.get('/:crawlerId/public-key', async (req: Request, res: Response) => {
   try {

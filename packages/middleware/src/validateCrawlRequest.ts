@@ -161,10 +161,13 @@ function isMonetizedRoute(path: string, monetizedRoutes: string[]): boolean {
 
 // --- Bot detection helper ---
 function isBotRequest(userAgent: string): boolean {
+  // Specific bot patterns that won't catch regular browsers
+  // Using word boundaries (\b) to avoid matching "bot" in "robot" or other words
   const botPatterns = [
-    /bot/i, /crawler/i, /spider/i, /scraper/i, /gpt/i, /chatgpt/i, /claude/i, /anthropic/i,
+    /bot\b/i, /crawler\b/i, /spider\b/i, /scraper\b/i, /gptbot/i, /chatgpt/i, /claude/i, /anthropic/i,
     /bingbot/i, /googlebot/i, /slurp/i, /duckduckbot/i, /baiduspider/i, /yandexbot/i,
-    /facebookexternalhit/i, /twitterbot/i, /linkedinbot/i, /whatsapp/i, /telegrambot/i
+    /facebookexternalhit/i, /twitterbot/i, /linkedinbot/i, /whatsapp/i, /telegrambot/i,
+    /curl/i, /wget/i, /python/i, /requests/i, /scrapy/i, /selenium/i, /puppeteer/i, /playwright/i
   ];
   
   return botPatterns.some(pattern => pattern.test(userAgent));
@@ -200,11 +203,30 @@ function getBotName(userAgent: string): string {
 }
 
 // --- Bot classification helper ---
-function classifyBot(headers: Record<string, string>, userAgent: string, knownBots: any[]) {
+async function classifyBot(headers: Record<string, string>, userAgent: string, knownBots: any[], backendUrl: string) {
   // Signed bot: has crawler-id, signature-input, signature
   if (headers['crawler-id'] && headers['signature-input'] && headers['signature']) {
     return { type: 'signed', knownBot: null };
   }
+  
+  // Check if this is a registered signed bot (by user agent or bot name)
+  try {
+    const registeredBotRes = await fetch(`${backendUrl}/api/bots/check-registered`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_agent: userAgent })
+    });
+    
+    if (registeredBotRes.ok) {
+      const botData = await registeredBotRes.json();
+      if (botData.is_registered) {
+        return { type: 'registered_signed', knownBot: null, botData: botData };
+      }
+    }
+  } catch (err) {
+    console.log(`❌ Middleware: Failed to check registered bot status:`, err);
+  }
+  
   // Known bot: match user-agent
   for (const bot of knownBots) {
     try {
@@ -235,6 +257,7 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
     const maxPrice = parseFloat(headers['crawler-max-price'] || '0');
     const signatureInput = headers['signature-input'] || '';
     const signature = headers['signature'] || '';
+    
     // Extract domain with fallbacks for different environments
     let domain = '';
     if (req.hostname) {
@@ -254,6 +277,16 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
     const ip = req.ip || req.connection?.remoteAddress || '';
 
     console.log(`🔍 Middleware: Processing request for domain: ${domain}`);
+
+    // --- EARLY EXIT: Allow regular browsers to pass through immediately ---
+    const isSignedBot = crawlerId && signatureInput && signature;
+    const isActualBot = isBotRequest(userAgent);
+    
+    // If it's not a signed bot and not an actual bot, allow it immediately
+    if (!isSignedBot && !isActualBot) {
+      console.log(`✅ Middleware: Regular browser detected, allowing access: ${userAgent}`);
+      return next();
+    }
 
     // --- 0. Site ID-based validation (new system) ---
     if (configSiteId) {
@@ -314,8 +347,6 @@ export function validateCrawlRequest(options?: ValidateCrawlRequestOptions) {
     }
 
     // --- 1. Check if this is a signed bot request ---
-    const isSignedBot = crawlerId && signatureInput && signature;
-    
     if (isSignedBot) {
       console.log(`🔍 Middleware: Signed bot detected: ${crawlerId}`);
       
@@ -408,8 +439,27 @@ Bots must pay to access this content. Check BotWall.`);
 
     // Fetch known bots
     const knownBots = await getKnownBots(backendUrl);
-    const { type, knownBot } = classifyBot(headers, userAgent, knownBots);
+    const { type, knownBot, botData } = await classifyBot(headers, userAgent, knownBots, backendUrl);
     console.log(`🔍 Middleware: Bot classified as ${type}${knownBot ? ` (${knownBot.name})` : ''}`);
+
+    // Handle registered signed bots without proper headers
+    if (type === 'registered_signed') {
+      console.log(`🔍 Middleware: Registered signed bot detected without proper headers: ${userAgent}`);
+      return res.status(401).send(`🔐 Authentication Required - BotWall Protection
+
+This content is protected by BotWall's pay-per-crawl system.
+
+Your bot "${botData?.bot_name || userAgent}" is registered but missing required authentication headers.
+
+Required headers:
+- crawler-id: Your bot ID
+- signature-input: Request signature input
+- signature: Ed25519 signature
+
+Please include these headers in your request to access this content.
+
+For more information, visit: https://botwall.com`);
+    }
 
     // For known bots, check site-specific block/allow
     if (type === 'known' && knownBot) {
@@ -426,7 +476,7 @@ Bots must pay to access this content. Check BotWall.`);
       }
     }
 
-    // Handle unknown bots - BLOCK BY DEFAULT
+    // Handle unknown bots - BLOCK BY DEFAULT (these are likely scrapers/crawlers)
     if (type === 'unknown') {
       console.log(`🔍 Middleware: Unknown bot detected: ${userAgent}`);
       
