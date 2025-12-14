@@ -5,7 +5,7 @@ Quick setup guide for BotWall protection.
 ## Quick Start
 
 ### 1. Get Your Site ID
-- Sign up at [botwall.com](https://botwall.com)
+- Sign up at [usebotwall.com](https://usebotwall.com)
 - Create a site and get your Site ID
 
 ### 2. Backend Protection
