@@ -1,4 +1,4 @@
-# BotWall Frontend Protection
+# BotWall Frontend Protection (Currently Working NOT TESTED!)
 
 Frontend protection script for BotWall - protects your frontend from unwanted bots with easy installation and comprehensive analytics.
 
